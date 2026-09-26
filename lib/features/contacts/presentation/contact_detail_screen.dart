@@ -45,6 +45,7 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return AsyncContent<ContactModel?>(
+      pageTitle: 'Cari',
       value: ref.watch(contactProvider(widget.contact.id)),
       onRetry: () => ref.invalidate(contactsProvider),
       data: (contact) {
@@ -55,6 +56,7 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
           );
         }
         return AsyncContent<List<CashTransactionModel>>(
+          pageTitle: 'Cari',
           value: ref.watch(transactionsProvider),
           onRetry: () => ref.invalidate(transactionsProvider),
           data: (rows) => _buildDetail(

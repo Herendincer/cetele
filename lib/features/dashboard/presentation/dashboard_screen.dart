@@ -226,6 +226,7 @@ class _DashboardMetricsSection extends StatelessWidget {
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: isWide ? 1.4 : 1.15,
+          mainAxisExtent: isWide ? null : 156,
           children: [
             KpiCard(
               label: 'Nakit & Banka',

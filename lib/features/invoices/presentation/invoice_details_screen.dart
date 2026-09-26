@@ -87,6 +87,7 @@ class _InvoiceDetailsScreenState extends ConsumerState<InvoiceDetailsScreen> {
 
   @override
   Widget build(BuildContext context) => AsyncContent<InvoiceModel?>(
+    pageTitle: 'Fatura',
     value: ref.watch(invoiceProvider(widget.invoice.id)),
     onRetry: () => ref.invalidate(invoicesProvider),
     data: (invoice) {

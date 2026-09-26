@@ -7,26 +7,37 @@ class AsyncContent<T> extends StatelessWidget {
     required this.value,
     required this.onRetry,
     required this.data,
+    this.pageTitle,
   });
 
+  final String? pageTitle;
   final AsyncValue<T> value;
   final VoidCallback onRetry;
   final Widget Function(T) data;
 
+  Widget _fallback(Widget child) => pageTitle == null
+      ? child
+      : Scaffold(
+          appBar: AppBar(title: Text(pageTitle!)),
+          body: child,
+        );
+
   @override
   Widget build(BuildContext context) => value.when(
     skipLoadingOnRefresh: false,
-    loading: () => const Center(child: CircularProgressIndicator()),
-    error: (_, _) => Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Veriler yüklenemedi. Lütfen tekrar deneyin.',
-            textAlign: TextAlign.center,
-          ),
-          TextButton(onPressed: onRetry, child: const Text('Tekrar dene')),
-        ],
+    loading: () => _fallback(const Center(child: CircularProgressIndicator())),
+    error: (_, _) => _fallback(
+      Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Veriler yüklenemedi. Lütfen tekrar deneyin.',
+              textAlign: TextAlign.center,
+            ),
+            TextButton(onPressed: onRetry, child: const Text('Tekrar dene')),
+          ],
+        ),
       ),
     ),
     data: data,

@@ -160,9 +160,20 @@ class _CashBankScreenState extends ConsumerState<CashBankScreen> {
                         CurrencyHelper.formatFromKurus(
                           CurrencyHelper.liraToKurus(
                             accounts.fold<double>(
-                              0,
-                              (sum, a) => sum + a.balance,
-                            ),
+                                  0,
+                                  (sum, a) => sum + a.balance,
+                                ) +
+                                transactions
+                                    .where((t) => t.accountId.isEmpty)
+                                    .fold<double>(
+                                      0,
+                                      (sum, t) =>
+                                          sum +
+                                          (t.type ==
+                                                  CashTransactionType.collection
+                                              ? t.amount
+                                              : -t.amount),
+                                    ),
                           ),
                         ),
                         style: const TextStyle(

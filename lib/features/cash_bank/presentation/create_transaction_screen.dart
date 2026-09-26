@@ -98,10 +98,19 @@ class _CreateTransactionScreenState
   double get _amount =>
       double.tryParse(_amountController.text.trim().replaceAll(',', '.')) ?? 0;
 
+  double get _availableBalance {
+    final account = _selectedAccount;
+    if (account == null) return 0;
+    final old = widget.existingTransaction;
+    if (old == null || old.accountId != account.id) return account.balance;
+    return account.balance +
+        (old.type == CashTransactionType.payment ? old.amount : -old.amount);
+  }
+
   bool get _hasInsufficientBalance =>
       _transactionType == CashTransactionType.payment &&
       _selectedAccount != null &&
-      _amount > _selectedAccount!.balance;
+      _amount > _availableBalance;
 
   Future<bool> _confirmDiscardChanges() {
     return showConfirmDialog(
@@ -144,7 +153,7 @@ class _CreateTransactionScreenState
         title: 'Yetersiz Bakiye',
         message:
             '${_selectedAccount!.name} hesabında yeterli bakiye yok '
-            '(mevcut: ${CurrencyHelper.formatFromKurus(CurrencyHelper.liraToKurus(_selectedAccount!.balance))}). '
+            '(mevcut: ${CurrencyHelper.formatFromKurus(CurrencyHelper.liraToKurus(_availableBalance))}). '
             'Yine de kaydetmek istiyor musunuz?',
         confirmLabel: 'Yine de Kaydet',
       );
@@ -312,7 +321,7 @@ class _CreateTransactionScreenState
                   const SizedBox(height: 6),
                   Text(
                     'Yetersiz bakiye: mevcut bakiye '
-                    '${CurrencyHelper.formatFromKurus(CurrencyHelper.liraToKurus(_selectedAccount!.balance))}',
+                    '${CurrencyHelper.formatFromKurus(CurrencyHelper.liraToKurus(_availableBalance))}',
                     style: const TextStyle(
                       color: AppTheme.expenseColor,
                       fontWeight: FontWeight.w600,

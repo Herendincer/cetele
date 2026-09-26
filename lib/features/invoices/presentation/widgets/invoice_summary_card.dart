@@ -27,13 +27,24 @@ class InvoiceSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Finansal Özet', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Finansal Özet',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             _SummaryRow(label: 'Ara Toplam', amount: subtotal),
-            _SummaryRow(label: 'Toplam İskonto', amount: -totalDiscount, color: AppTheme.expenseColor),
+            _SummaryRow(
+              label: 'Toplam İskonto',
+              amount: -totalDiscount,
+              color: AppTheme.expenseColor,
+            ),
             _SummaryRow(label: 'KDV Toplamı', amount: totalVat),
             const Divider(height: 20),
-            _SummaryRow(label: 'Genel Toplam', amount: grandTotal, isEmphasized: true),
+            _SummaryRow(
+              label: 'Genel Toplam',
+              amount: grandTotal,
+              isEmphasized: true,
+            ),
           ],
         ),
       ),
@@ -63,7 +74,11 @@ class _SummaryRow extends StatelessWidget {
     final TextStyle style = TextStyle(
       fontSize: isEmphasized ? 18 : 14,
       fontWeight: isEmphasized ? FontWeight.w700 : FontWeight.w500,
-      color: color ?? (isEmphasized ? AppTheme.textPrimaryColor : AppTheme.textSecondaryColor),
+      color:
+          color ??
+          (isEmphasized
+              ? AppTheme.textPrimaryColor
+              : AppTheme.textSecondaryColor),
     );
 
     return Padding(
@@ -71,8 +86,22 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: style),
-          Text('$sign$formatted', style: style),
+          Expanded(
+            child: Text(
+              label,
+              style: style,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text('$sign$formatted', style: style),
+            ),
+          ),
         ],
       ),
     );
