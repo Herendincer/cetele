@@ -1,267 +1,137 @@
-import 'dart:async';
-
-
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:intl/intl.dart';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-
-
-import '../../../../core/constants/app_constants.dart';
-
-import '../../../../core/services/supabase_service.dart';
-
+import '../../../../core/providers/data_providers.dart';
+import '../../../contacts/presentation/controllers/contacts_controller.dart';
+import '../../../contacts/presentation/models/contact_model.dart';
+import '../../../cash_bank/data/transactions_repository.dart';
+import '../../../cash_bank/presentation/controllers/cash_bank_controller.dart';
+import '../../../cash_bank/presentation/models/account_model.dart';
+import '../../../cash_bank/presentation/models/cash_transaction_model.dart';
+import '../../../invoices/presentation/controllers/invoices_controller.dart';
+import '../../../invoices/presentation/models/invoice_model.dart';
 import '../models/dashboard_metrics.dart';
-
 import '../models/monthly_financials.dart';
+import '../models/recent_activity_entry.dart';
 
-
-
-/// Giriş yapan kullanıcının Supabase verilerinden dashboard metriklerini
-
-/// hesaplayan controller.
-
+/// Ortak veri provider'ları oturum değişiminde ve her yazma sonrasında yenilenir.
 class DashboardController extends AsyncNotifier<DashboardMetrics> {
-
-  StreamSubscription<AuthState>? _authSubscription;
-
-
-
   @override
-
-  Future<DashboardMetrics> build() {
-
-    // Soğuk başlangıçta oturum henüz geri yüklenmemiş olabilir; oturum
-
-    // hazır olduğunda veriler otomatik olarak yeniden yüklensin.
-
-    _authSubscription?.cancel();
-
-    _authSubscription = SupabaseService.authStateChanges.listen((authState) {
-
-      final hasSession = authState.session?.user.id != null;
-
-      if (hasSession && (state.hasError || state.value == null)) {
-
-        ref.invalidateSelf();
-
+  Future<DashboardMetrics> build() async {
+    final values = await Future.wait<Object>([
+      ref.watch(contactsProvider.future),
+      ref.watch(accountsProvider.future),
+      ref.watch(transactionsProvider.future),
+    ]);
+    final contacts = values[0] as List<ContactModel>;
+    final accounts = values[1] as List<AccountModel>;
+    final transactions = values[2] as List<CashTransactionModel>;
+    double receivables = 0;
+    double payables = 0;
+    for (final contact in contacts) {
+      if (contact.balance > 0) {
+        receivables += contact.balance;
+      } else {
+        payables -= contact.balance;
       }
-
-    });
-
-    ref.onDispose(() => _authSubscription?.cancel());
-
-    return _fetchMetrics();
-
+    }
+    // Hesaba henüz bağlanmamış eski hareketler de toplam varlığa dahildir.
+    double cashAndBankBalance = accounts.fold(
+      0,
+      (sum, account) => sum + account.openingBalance,
+    );
+    for (final transaction in transactions) {
+      cashAndBankBalance += transaction.type == CashTransactionType.collection
+          ? transaction.amount
+          : -transaction.amount;
+    }
+    return DashboardMetrics(
+      totalReceivables: receivables,
+      totalPayables: payables,
+      cashAndBankBalance: cashAndBankBalance,
+      monthlySeries: _buildMonthlySeries([
+        for (final transaction in transactions)
+          {
+            'amount': transaction.amount,
+            'direction': transaction.type == CashTransactionType.collection
+                ? 'in'
+                : 'out',
+            'transaction_date': transaction.date.toIso8601String(),
+          },
+      ]),
+    );
   }
-
-
 
   Future<void> refresh() async {
-
-    state = const AsyncLoading();
-
-    state = await AsyncValue.guard(_fetchMetrics);
-
-  }
-
-
-
-  Future<DashboardMetrics> _fetchMetrics() async {
-
-    final userId = await _resolveUserId();
-
-    if (userId == null) {
-
-      throw Exception('Kullanıcı oturumu bulunamadı');
-
-    }
-
-
-
-    final client = SupabaseService.client;
-
-
-
-    final contactRows = await client
-
-        .from(AppConstants.tableContacts)
-
-        .select('balance')
-
-        .eq('user_id', userId);
-
-
-
-    double receivables = 0;
-
-    double payables = 0;
-
-    for (final row in contactRows as List) {
-
-      final balance = ((row as Map)['balance'] as num?)?.toDouble() ?? 0;
-
-      if (balance > 0) {
-
-        receivables += balance;
-
-      } else {
-
-        payables += -balance;
-
-      }
-
-    }
-
-
-
-    final transactionRows = await client
-
-        .from(AppConstants.tableTransactions)
-
-        .select('amount, direction, transaction_date')
-
-        .eq('user_id', userId);
-
-
-
-    double cashAndBankBalance = 0;
-
-    for (final row in transactionRows as List) {
-
-      final map = row as Map;
-
-      final amount = (map['amount'] as num?)?.toDouble() ?? 0;
-
-      cashAndBankBalance += map['direction'] == 'in' ? amount : -amount;
-
-    }
-
-
-
-    return DashboardMetrics(
-
-      totalReceivables: receivables,
-
-      totalPayables: payables,
-
-      cashAndBankBalance: cashAndBankBalance,
-
-      monthlySeries: _buildMonthlySeries(transactionRows),
-
-    );
-
-  }
-
-
-
-  /// Oturum hen\u00fcz geri y\u00fcklenmemi\u015fse (so\u011fuk ba\u015flang\u0131\u00e7), ilk auth olay\u0131n\u0131
-
-  /// bekleyerek yar\u0131\u015f durumunu \u00f6nler.
-
-  Future<String?> _resolveUserId() async {
-
-    final immediate = SupabaseService.currentUser?.id;
-
-    if (immediate != null) return immediate;
-
+    ref.read(dataRevisionProvider.notifier).refresh();
     try {
-
-      final authState = await SupabaseService.authStateChanges.first.timeout(
-
-        const Duration(seconds: 5),
-
-      );
-
-      return authState.session?.user.id ?? SupabaseService.currentUser?.id;
-
+      await future;
     } catch (_) {
-
-      return SupabaseService.currentUser?.id;
-
+      // Hata AsyncValue üzerinden ekrandaki tekrar deneme alanında gösterilir.
     }
-
   }
-
-
 
   List<MonthlyFinancials> _buildMonthlySeries(List transactionRows) {
-
     final DateTime now = DateTime.now();
-
     final List<DateTime> months = [
-
       for (int i = 5; i >= 0; i--) DateTime(now.year, now.month - i, 1),
-
     ];
-
-    final Map<String, double> incomeByMonth = {for (final m in months) _monthKey(m): 0};
-
-    final Map<String, double> expenseByMonth = {for (final m in months) _monthKey(m): 0};
-
-
-
+    final Map<String, double> incomeByMonth = {
+      for (final m in months) _monthKey(m): 0,
+    };
+    final Map<String, double> expenseByMonth = {
+      for (final m in months) _monthKey(m): 0,
+    };
     for (final row in transactionRows) {
-
       final map = row as Map;
-
       final date = DateTime.parse(map['transaction_date'] as String);
-
       final key = _monthKey(DateTime(date.year, date.month));
-
       if (!incomeByMonth.containsKey(key)) continue;
-
       final amount = (map['amount'] as num?)?.toDouble() ?? 0;
-
       if (map['direction'] == 'in') {
-
         incomeByMonth[key] = incomeByMonth[key]! + amount;
-
       } else {
-
         expenseByMonth[key] = expenseByMonth[key]! + amount;
-
       }
-
     }
-
-
-
     final DateFormat labelFormat = DateFormat('MMM', 'tr_TR');
-
     return [
-
       for (final month in months)
-
         MonthlyFinancials(
-
           monthLabel: labelFormat.format(month),
-
           income: incomeByMonth[_monthKey(month)]!,
-
           expense: expenseByMonth[_monthKey(month)]!,
-
         ),
-
     ];
-
   }
 
-
-
   String _monthKey(DateTime month) => '${month.year}-${month.month}';
-
 }
 
-
-
 final dashboardControllerProvider =
-
     AsyncNotifierProvider<DashboardController, DashboardMetrics>(
+      DashboardController.new,
+    );
 
-  DashboardController.new,
+class RecentActivities extends AsyncNotifier<List<RecentActivityEntry>> {
+  @override
+  Future<List<RecentActivityEntry>> build() async {
+    final values = await Future.wait<Object>([
+      ref.watch(invoicesProvider.future),
+      ref.watch(transactionsProvider.future),
+    ]);
+    final entries = [
+      for (final invoice in values[0] as List<InvoiceModel>)
+        RecentActivityEntry.invoice(invoice),
+      for (final transaction in values[1] as List<CashTransactionModel>)
+        RecentActivityEntry.transaction(transaction),
+    ];
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries.take(5).toList();
+  }
+}
 
-); 
+final recentActivitiesProvider =
+    AsyncNotifierProvider<RecentActivities, List<RecentActivityEntry>>(
+      RecentActivities.new,
+    );

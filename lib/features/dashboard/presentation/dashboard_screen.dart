@@ -5,14 +5,13 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_helper.dart';
 import '../../cash_bank/presentation/create_transaction_screen.dart';
-import '../../cash_bank/presentation/mock_cash_data.dart';
-import '../../cash_bank/presentation/models/account_model.dart';
 import '../../cash_bank/presentation/models/cash_transaction_model.dart';
 import '../../invoices/presentation/create_invoice_screen.dart';
 import '../../invoices/presentation/invoice_details_screen.dart';
 import '../../invoices/presentation/models/invoice_type.dart';
 import 'controllers/dashboard_controller.dart';
-import 'dashboard_mock_data.dart';
+import '../../../core/widgets/async_content.dart';
+import '../../../core/providers/data_providers.dart';
 import 'models/dashboard_metrics.dart';
 import 'models/recent_activity_entry.dart';
 import 'widgets/income_expense_chart.dart';
@@ -24,13 +23,19 @@ import 'widgets/recent_activity_tile.dart';
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
-  Future<void> _openCreateSalesInvoice(BuildContext context, WidgetRef ref) async {
+  Future<void> _openCreateSalesInvoice(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const CreateInvoiceScreen(initialType: InvoiceType.sales),
+        builder: (_) =>
+            const CreateInvoiceScreen(initialType: InvoiceType.sales),
       ),
     );
-    ref.read(dashboardControllerProvider.notifier).refresh();
+    if (context.mounted) {
+      ref.read(dashboardControllerProvider.notifier).refresh();
+    }
   }
 
   Future<void> _openAddExpense(BuildContext context, WidgetRef ref) async {
@@ -46,26 +51,14 @@ class DashboardScreen extends ConsumerWidget {
     WidgetRef ref,
     CashTransactionType type,
   ) async {
-    final CashTransactionModel? result = await Navigator.of(context).push<CashTransactionModel>(
+    await Navigator.of(context).push<CashTransactionModel>(
       MaterialPageRoute(
-        builder: (_) => CreateTransactionScreen(accounts: mockAccounts, initialType: type),
+        builder: (_) => CreateTransactionScreen(initialType: type),
       ),
     );
-    if (result == null) return;
-
-    final int accountIndex = mockAccounts.indexWhere((a) => a.id == result.accountId);
-    if (accountIndex != -1) {
-      final AccountModel account = mockAccounts[accountIndex];
-      final double delta = result.type == CashTransactionType.collection
-          ? result.amount
-          : -result.amount;
-      mockAccounts[accountIndex] = account.copyWith(
-        balance: account.balance + delta,
-        lastTransactionDate: result.date,
-      );
+    if (context.mounted) {
+      ref.read(dashboardControllerProvider.notifier).refresh();
     }
-    mockCashTransactions.add(result);
-    ref.read(dashboardControllerProvider.notifier).refresh();
   }
 
   void _openActivity(BuildContext context, RecentActivityEntry activity) {
@@ -73,7 +66,9 @@ class DashboardScreen extends ConsumerWidget {
       final invoice = activity.invoiceOrNull;
       if (invoice == null) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => InvoiceDetailsScreen(invoice: invoice)),
+        MaterialPageRoute(
+          builder: (_) => InvoiceDetailsScreen(invoice: invoice),
+        ),
       );
       return;
     }
@@ -83,7 +78,10 @@ class DashboardScreen extends ConsumerWidget {
     _showTransactionDetails(context, transaction);
   }
 
-  void _showTransactionDetails(BuildContext context, CashTransactionModel transaction) {
+  void _showTransactionDetails(
+    BuildContext context,
+    CashTransactionModel transaction,
+  ) {
     final dateFormat = DateFormat('d MMM yyyy', 'tr_TR');
     showModalBottomSheet(
       context: context,
@@ -94,7 +92,10 @@ class DashboardScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(transaction.type.label, style: Theme.of(sheetContext).textTheme.titleMedium),
+              Text(
+                transaction.type.label,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
               const SizedBox(height: 12),
               _DetailRow(label: 'Cari', value: transaction.contactName),
               _DetailRow(label: 'Hesap', value: transaction.accountName),
@@ -104,7 +105,10 @@ class DashboardScreen extends ConsumerWidget {
                   CurrencyHelper.liraToKurus(transaction.amount),
                 ),
               ),
-              _DetailRow(label: 'Tarih', value: dateFormat.format(transaction.date)),
+              _DetailRow(
+                label: 'Tarih',
+                value: dateFormat.format(transaction.date),
+              ),
               if (transaction.description.isNotEmpty)
                 _DetailRow(label: 'Açıklama', value: transaction.description),
             ],
@@ -117,13 +121,16 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isWide = MediaQuery.sizeOf(context).width >= 900;
-    final AsyncValue<DashboardMetrics> metricsAsync = ref.watch(dashboardControllerProvider);
+    final AsyncValue<DashboardMetrics> metricsAsync = ref.watch(
+      dashboardControllerProvider,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Genel Durum')),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => ref.read(dashboardControllerProvider.notifier).refresh(),
+          onRefresh: () =>
+              ref.read(dashboardControllerProvider.notifier).refresh(),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
@@ -131,46 +138,61 @@ class DashboardScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 QuickActionBar(
-                  onCreateSalesInvoice: () => _openCreateSalesInvoice(context, ref),
+                  onCreateSalesInvoice: () =>
+                      _openCreateSalesInvoice(context, ref),
                   onAddExpense: () => _openAddExpense(context, ref),
                   onQuickCollection: () => _openQuickCollection(context, ref),
                 ),
                 const SizedBox(height: 20),
                 metricsAsync.when(
-                  data: (metrics) => _DashboardMetricsSection(metrics: metrics, isWide: isWide),
+                  data: (metrics) => _DashboardMetricsSection(
+                    metrics: metrics,
+                    isWide: isWide,
+                  ),
                   loading: () => const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
                     child: Center(child: CircularProgressIndicator()),
                   ),
                   error: (error, stackTrace) => _DashboardErrorCard(
-                    message: '$error',
-                    onRetry: () => ref.read(dashboardControllerProvider.notifier).refresh(),
+                    message: 'Bilgiler alınamadı. Bağlantınızı kontrol edip tekrar deneyin.',
+                    onRetry: () => ref
+                        .read(dashboardControllerProvider.notifier)
+                        .refresh(),
                   ),
                 ),
                 const SizedBox(height: 24),
-              Text(
-                'Son Hareketler',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      for (final activity
-                          in DashboardMockData.recentActivities) ...[
-                        RecentActivityTile(
-                          activity: activity,
-                          onTap: () => _openActivity(context, activity),
-                        ),
-                        if (activity != DashboardMockData.recentActivities.last)
-                          const Divider(height: 1),
-                      ],
-                    ],
+                Text(
+                  'Son Hareketler',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AsyncContent<List<RecentActivityEntry>>(
+                      value: ref.watch(recentActivitiesProvider),
+                      onRetry: () =>
+                          ref.read(dataRevisionProvider.notifier).refresh(),
+                      data: (activities) => Column(
+                        children: [
+                          if (activities.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('Henüz kayıtlı hareket yok'),
+                            ),
+                          for (final activity in activities) ...[
+                            RecentActivityTile(
+                              activity: activity,
+                              onTap: () => _openActivity(context, activity),
+                            ),
+                            if (activity != activities.last)
+                              const Divider(height: 1),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
                 const SizedBox(height: 16),
               ],
             ),
@@ -190,7 +212,9 @@ class _DashboardMetricsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double net = metrics.monthlyNet;
-    final Color netColor = net >= 0 ? AppTheme.incomeColor : AppTheme.expenseColor;
+    final Color netColor = net >= 0
+        ? AppTheme.incomeColor
+        : AppTheme.expenseColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,13 +248,18 @@ class _DashboardMetricsSection extends StatelessWidget {
             KpiCard(
               label: 'Bu Ayki Net Durum',
               amountInLira: net,
-              icon: net >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+              icon: net >= 0
+                  ? Icons.trending_up_rounded
+                  : Icons.trending_down_rounded,
               accentColor: netColor,
             ),
           ],
         ),
         const SizedBox(height: 24),
-        Text('Gelir / Gider Karşılaştırması', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Gelir / Gider Karşılaştırması',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
         Card(
           child: Padding(
@@ -278,11 +307,17 @@ class _DashboardErrorCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(message, style: const TextStyle(color: AppTheme.textSecondaryColor)),
+            Text(
+              message,
+              style: const TextStyle(color: AppTheme.textSecondaryColor),
+            ),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton(onPressed: onRetry, child: const Text('Tekrar Dene')),
+              child: OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Tekrar dene'),
+              ),
             ),
           ],
         ),
@@ -308,7 +343,13 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondaryColor, fontSize: 12)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.textSecondaryColor,
+            fontSize: 12,
+          ),
+        ),
       ],
     );
   }
@@ -327,7 +368,10 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondaryColor)),
+          Text(
+            label,
+            style: const TextStyle(color: AppTheme.textSecondaryColor),
+          ),
           Flexible(
             child: Text(
               value,

@@ -15,7 +15,7 @@ class DashboardMetrics {
   /// Carilere ödenecek toplam borç (negatif cari bakiyelerin mutlağı).
   final double totalPayables;
 
-  /// Tüm kasa/banka hareketlerinden hesaplanan net bakiye.
+  /// Hesap açılışları ve tüm kasa/banka hareketlerinden hesaplanan net bakiye.
   final double cashAndBankBalance;
 
   /// Son 6 aya ait gelir/gider serisi (grafik için).
