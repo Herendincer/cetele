@@ -5,12 +5,16 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_helper.dart';
 import 'create_invoice_screen.dart';
 import 'invoice_details_screen.dart';
-import 'mock_invoice_data.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import 'controllers/invoices_controller.dart';
 import 'models/invoice_model.dart';
 import 'models/invoice_type.dart';
 
 /// Satış ve alış faturalarını sekmeli şekilde listeleyen ekran.
-class InvoicesScreen extends StatelessWidget {
+class InvoicesScreen extends ConsumerWidget {
   const InvoicesScreen({super.key});
 
   void _openCreateInvoice(BuildContext context) {
@@ -18,14 +22,16 @@ class InvoicesScreen extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CreateInvoiceScreen(
-          initialType: activeTab == 0 ? InvoiceType.sales : InvoiceType.purchase,
+          initialType: activeTab == 0
+              ? InvoiceType.sales
+              : InvoiceType.purchase,
         ),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -45,15 +51,23 @@ class InvoicesScreen extends StatelessWidget {
             label: const Text('Fatura Oluştur'),
           ),
         ),
-        body: TabBarView(
-          children: [
-            _InvoiceList(
-              invoices: mockInvoices.where((invoice) => invoice.type == InvoiceType.sales).toList(),
-            ),
-            _InvoiceList(
-              invoices: mockInvoices.where((invoice) => invoice.type == InvoiceType.purchase).toList(),
-            ),
-          ],
+        body: AsyncContent<List<InvoiceModel>>(
+          value: ref.watch(invoicesProvider),
+          onRetry: () => ref.invalidate(invoicesProvider),
+          data: (invoices) => TabBarView(
+            children: [
+              _InvoiceList(
+                invoices: invoices
+                    .where((invoice) => invoice.type == InvoiceType.sales)
+                    .toList(),
+              ),
+              _InvoiceList(
+                invoices: invoices
+                    .where((invoice) => invoice.type == InvoiceType.purchase)
+                    .toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -82,7 +96,9 @@ class _InvoiceList extends StatelessWidget {
         return Card(
           child: ListTile(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => InvoiceDetailsScreen(invoice: invoice)),
+              MaterialPageRoute(
+                builder: (_) => InvoiceDetailsScreen(invoice: invoice),
+              ),
             ),
             title: Text(
               invoice.contactName,
@@ -91,20 +107,25 @@ class _InvoiceList extends StatelessWidget {
             subtitle: Text(
               '#${invoice.number} · ${DateFormat('d MMM yyyy', 'tr_TR').format(invoice.issueDate)}',
             ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  CurrencyHelper.formatFromKurus(kurus),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: isSales ? AppTheme.incomeColor : AppTheme.expenseColor,
+            trailing: SizedBox(
+              width: 130,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    CurrencyHelper.formatFromKurus(kurus),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: isSales
+                          ? AppTheme.incomeColor
+                          : AppTheme.expenseColor,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                _StatusBadge(status: invoice.status),
-              ],
+                  const SizedBox(height: 4),
+                  _StatusBadge(status: invoice.status),
+                ],
+              ),
             ),
           ),
         );
@@ -134,7 +155,11 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         status.label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import '../../contacts/presentation/widgets/contact_picker.dart';
+import '../../contacts/presentation/controllers/contacts_controller.dart';
+import 'controllers/invoices_controller.dart';
+import 'models/invoice_model.dart';
 
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/app_snackbar.dart';
@@ -10,6 +17,7 @@ import 'widgets/invoice_line_item_row.dart';
 import 'widgets/invoice_summary_card.dart';
 
 /// Demo amaçlı cari listesi (Supabase entegrasyonu tamamlanana kadar).
+// ignore: unused_element
 const List<String> _mockContactNames = [
   'Aslan Tekstil Ltd. Şti.',
   'Yıldız Elektronik',
@@ -19,16 +27,17 @@ const List<String> _mockContactNames = [
 ];
 
 /// Yeni satış/alış faturası oluşturma formu.
-class CreateInvoiceScreen extends StatefulWidget {
+class CreateInvoiceScreen extends ConsumerStatefulWidget {
   const CreateInvoiceScreen({super.key, this.initialType = InvoiceType.sales});
 
   final InvoiceType initialType;
 
   @override
-  State<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
+  ConsumerState<CreateInvoiceScreen> createState() =>
+      _CreateInvoiceScreenState();
 }
 
-class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
+class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   final _formKey = GlobalKey<FormState>();
   final _invoiceNumberController = TextEditingController();
   final List<InvoiceLineItemData> _items = [];
@@ -127,19 +136,31 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
+    if (ref.read(invoicesControllerProvider).isLoading) return;
     final bool formValid = _formKey.currentState?.validate() ?? false;
 
-    if (_selectedContact == null) {
+    if (_selectedContact == null ||
+        !(ref
+                .read(contactsProvider)
+                .value
+                ?.any((c) => c.id == _selectedContact) ??
+            false)) {
       AppSnackBar.showError(context, 'Lütfen bir cari seçin');
       return;
     }
     if (!formValid) {
-      AppSnackBar.showError(context, 'Lütfen zorunlu alanları eksiksiz ve doğru doldurun');
+      AppSnackBar.showError(
+        context,
+        'Lütfen zorunlu alanları eksiksiz ve doğru doldurun',
+      );
       return;
     }
     if (_dueDate != null && _dueDate!.isBefore(_issueDate)) {
-      AppSnackBar.showError(context, 'Vade tarihi, düzenleme tarihinden önce olamaz');
+      AppSnackBar.showError(
+        context,
+        'Vade tarihi, düzenleme tarihinden önce olamaz',
+      );
       return;
     }
     if (_grandTotal <= 0) {
@@ -147,9 +168,39 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
+    final invoice = InvoiceModel(
+      id: '',
+      number: _invoiceNumberController.text.trim(),
+      type: _invoiceType,
+      contactId: _selectedContact,
+      contactName: ref
+          .read(contactsProvider)
+          .requireValue
+          .firstWhere((c) => c.id == _selectedContact)
+          .name,
+      issueDate: _issueDate,
+      dueDate: _dueDate,
+      items: _items
+          .map(
+            (item) => InvoiceItemModel(
+              description: item.descriptionController.text.trim(),
+              quantity: double.parse(item.quantity.toStringAsFixed(2)),
+              unitPrice: double.parse(item.unitPrice.toStringAsFixed(2)),
+              vatRate: item.vatRate,
+              discountPercent: item.discountPercent,
+            ),
+          )
+          .toList(),
+    );
+    final ok = await ref
+        .read(invoicesControllerProvider.notifier)
+        .create(invoice);
+    if (!mounted || !ok) return;
     setState(() => _isDirty = false);
     AppSnackBar.showSuccess(context, 'Fatura başarıyla kaydedildi');
-    Navigator.of(context).pop(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(true);
+    });
   }
 
   @override
@@ -180,7 +231,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Fatura Bilgileri', style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          'Fatura Bilgileri',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const SizedBox(height: 12),
                         SegmentedButton<InvoiceType>(
                           segments: const [
@@ -202,14 +256,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                           },
                         ),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedContact,
-                          decoration: const InputDecoration(labelText: 'Cari Seçimi'),
-                          items: _mockContactNames
-                              .map((name) => DropdownMenuItem(value: name, child: Text(name)))
-                              .toList(),
-                          validator: (value) =>
-                              value == null ? 'Lütfen bir cari seçin' : null,
+                        ContactPicker(
+                          value: _selectedContact,
                           onChanged: (value) {
                             _markDirty();
                             setState(() => _selectedContact = value);
@@ -218,7 +266,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _invoiceNumberController,
-                          decoration: const InputDecoration(labelText: 'Fatura No'),
+                          decoration: const InputDecoration(
+                            labelText: 'Fatura No',
+                          ),
                           validator: Validators.required,
                         ),
                         const SizedBox(height: 12),
@@ -235,7 +285,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             Expanded(
                               child: _DatePickerField(
                                 label: 'Vade Tarihi',
-                                value: _dueDate == null ? 'Seçiniz' : dateFormat.format(_dueDate!),
+                                value: _dueDate == null
+                                    ? 'Seçiniz'
+                                    : dateFormat.format(_dueDate!),
                                 onTap: () => _pickDate(isIssueDate: false),
                               ),
                             ),
@@ -252,7 +304,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Kalemler', style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          'Kalemler',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const SizedBox(height: 12),
                         for (int i = 0; i < _items.length; i++)
                           InvoiceLineItemRow(
@@ -283,6 +338,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   totalVat: _totalVat,
                   grandTotal: _grandTotal,
                 ),
+                MutationError(
+                  value: ref.watch(invoicesControllerProvider),
+                  onRetry: _handleSave,
+                ),
               ],
             ),
           ),
@@ -294,7 +353,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _handleSave,
+                onPressed:
+                    ref.watch(invoicesControllerProvider).isLoading ||
+                        ref.watch(contactsProvider).isLoading ||
+                        ref.watch(contactsProvider).hasError
+                    ? null
+                    : _handleSave,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Kaydet'),
               ),
@@ -307,7 +371,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 }
 
 class _DatePickerField extends StatelessWidget {
-  const _DatePickerField({required this.label, required this.value, required this.onTap});
+  const _DatePickerField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
 
   final String label;
   final String value;
@@ -328,5 +396,3 @@ class _DatePickerField extends StatelessWidget {
     );
   }
 }
-
-
