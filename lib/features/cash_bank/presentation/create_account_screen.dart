@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import 'controllers/cash_bank_controller.dart';
 
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/app_snackbar.dart';
@@ -7,16 +10,22 @@ import '../../../core/widgets/confirm_dialog.dart';
 import 'models/account_model.dart';
 
 /// Yeni bir nakit kasa veya banka hesabı ekleme formu.
-class CreateAccountScreen extends StatefulWidget {
-  const CreateAccountScreen({super.key, this.initialType = AccountType.cash});
+class CreateAccountScreen extends ConsumerStatefulWidget {
+  const CreateAccountScreen({
+    super.key,
+    this.initialType = AccountType.cash,
+    this.existingAccount,
+  });
 
   final AccountType initialType;
+  final AccountModel? existingAccount;
 
   @override
-  State<CreateAccountScreen> createState() => _CreateAccountScreenState();
+  ConsumerState<CreateAccountScreen> createState() =>
+      _CreateAccountScreenState();
 }
 
-class _CreateAccountScreenState extends State<CreateAccountScreen> {
+class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _openingBalanceController = TextEditingController(text: '0');
@@ -27,7 +36,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   @override
   void initState() {
     super.initState();
-    _accountType = widget.initialType;
+    _accountType = widget.existingAccount?.type ?? widget.initialType;
+    _nameController.text = widget.existingAccount?.name ?? '';
+    _openingBalanceController.text =
+        (widget.existingAccount?.openingBalance ?? 0).toStringAsFixed(2);
     _nameController.addListener(_markDirty);
     _openingBalanceController.addListener(_markDirty);
   }
@@ -53,28 +65,41 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
+    if (ref.read(cashBankControllerProvider).isLoading) return;
     final bool formValid = _formKey.currentState?.validate() ?? false;
     if (!formValid) {
-      AppSnackBar.showError(context, 'Lütfen zorunlu alanları eksiksiz ve doğru doldurun');
+      AppSnackBar.showError(
+        context,
+        'Lütfen zorunlu alanları eksiksiz ve doğru doldurun',
+      );
       return;
     }
 
     final double openingBalance = _openingBalanceController.text.trim().isEmpty
         ? 0
-        : double.parse(_openingBalanceController.text.trim().replaceAll(',', '.'));
+        : double.parse(
+            _openingBalanceController.text.trim().replaceAll(',', '.'),
+          );
 
     final AccountModel account = AccountModel(
-      id: const Uuid().v4(),
+      id: widget.existingAccount?.id ?? '',
       name: _nameController.text.trim(),
       type: _accountType,
       balance: openingBalance,
+      openingBalance: openingBalance,
       lastTransactionDate: DateTime.now(),
     );
 
+    final ok = await ref
+        .read(cashBankControllerProvider.notifier)
+        .saveAccount(account, isNew: widget.existingAccount == null);
+    if (!mounted || !ok) return;
     setState(() => _isDirty = false);
-    AppSnackBar.showSuccess(context, 'Hesap başarıyla eklendi');
-    Navigator.of(context).pop(account);
+    AppSnackBar.showSuccess(context, 'Hesap başarıyla kaydedildi');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(account);
+    });
   }
 
   @override
@@ -89,7 +114,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Yeni Hesap Ekle')),
+        appBar: AppBar(
+          title: Text(
+            widget.existingAccount == null
+                ? 'Yeni Hesap Ekle'
+                : 'Hesabı Düzenle',
+          ),
+        ),
         body: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -126,13 +157,24 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _openingBalanceController,
-                  decoration: const InputDecoration(labelText: 'Açılış Bakiyesi'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Açılış Bakiyesi',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) return null;
-                    final double? parsed = double.tryParse(value.trim().replaceAll(',', '.'));
+                    final double? parsed = double.tryParse(
+                      value.trim().replaceAll(',', '.'),
+                    );
                     return parsed == null ? 'Geçerli bir tutar girin' : null;
                   },
+                ),
+                MutationError(
+                  value: ref.watch(cashBankControllerProvider),
+                  onRetry: _handleSave,
                 ),
               ],
             ),
@@ -145,7 +187,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _handleSave,
+                onPressed: ref.watch(cashBankControllerProvider).isLoading
+                    ? null
+                    : _handleSave,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Kaydet'),
               ),

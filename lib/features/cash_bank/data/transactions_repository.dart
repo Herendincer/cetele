@@ -19,6 +19,48 @@ class TransactionsRepository {
         .order('created_at', ascending: false);
     return rows.map(CashTransactionModel.fromJson).toList();
   }
+
+  Future<void> save(
+    String userId,
+    CashTransactionModel transaction, {
+    required bool isNew,
+  }) async {
+    final values = {
+      'contact_id': transaction.contactId,
+      'invoice_id': transaction.invoiceId,
+      'account_id': transaction.accountId.isEmpty
+          ? null
+          : transaction.accountId,
+      'account_type': transaction.accountType,
+      'direction': transaction.type == CashTransactionType.collection
+          ? 'in'
+          : 'out',
+      'amount': transaction.amount,
+      'transaction_date': transaction.date.toIso8601String().substring(0, 10),
+      'description': transaction.description,
+    };
+    if (isNew) {
+      await client.from('transactions').insert({...values, 'user_id': userId});
+    } else {
+      await client
+          .from('transactions')
+          .update(values)
+          .eq('user_id', userId)
+          .eq('id', transaction.id)
+          .select()
+          .single();
+    }
+  }
+
+  Future<void> delete(String userId, String id) async {
+    await client
+        .from('transactions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('id', id)
+        .select()
+        .single();
+  }
 }
 
 final transactionsRepositoryProvider = Provider<TransactionsRepository>(

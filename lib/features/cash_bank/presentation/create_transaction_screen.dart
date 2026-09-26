@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import '../../contacts/presentation/widgets/contact_picker.dart';
+import '../../contacts/presentation/controllers/contacts_controller.dart';
+import 'controllers/cash_bank_controller.dart';
+import '../data/transactions_repository.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_helper.dart';
@@ -11,6 +17,7 @@ import 'models/account_model.dart';
 import 'models/cash_transaction_model.dart';
 
 /// Demo amaçlı cari listesi (Supabase entegrasyonu tamamlanana kadar).
+// ignore: unused_element
 const List<String> _mockContactNames = [
   'Aslan Tekstil Ltd. Şti.',
   'Yıldız Elektronik',
@@ -20,21 +27,25 @@ const List<String> _mockContactNames = [
 ];
 
 /// Müşteriden tahsilat alma veya tedarikçiye/masrafa ödeme yapma formu.
-class CreateTransactionScreen extends StatefulWidget {
+class CreateTransactionScreen extends ConsumerStatefulWidget {
   const CreateTransactionScreen({
     super.key,
-    required this.accounts,
+    this.accounts = const [],
+    this.existingTransaction,
     this.initialType = CashTransactionType.collection,
   });
 
   final List<AccountModel> accounts;
+  final CashTransactionModel? existingTransaction;
   final CashTransactionType initialType;
 
   @override
-  State<CreateTransactionScreen> createState() => _CreateTransactionScreenState();
+  ConsumerState<CreateTransactionScreen> createState() =>
+      _CreateTransactionScreenState();
 }
 
-class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
+class _CreateTransactionScreenState
+    extends ConsumerState<CreateTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -48,8 +59,13 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   @override
   void initState() {
     super.initState();
-    _transactionType = widget.initialType;
-    _selectedAccountId = widget.accounts.isNotEmpty ? widget.accounts.first.id : null;
+    final existing = widget.existingTransaction;
+    _transactionType = existing?.type ?? widget.initialType;
+    _selectedAccountId = existing?.accountId;
+    _selectedContact = existing?.contactId;
+    _date = existing?.date ?? DateTime.now();
+    _amountController.text = existing?.amount.toStringAsFixed(2) ?? '';
+    _descriptionController.text = existing?.description ?? '';
     _amountController.addListener(_onFieldChanged);
     _descriptionController.addListener(_markDirty);
   }
@@ -72,7 +88,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
 
   AccountModel? get _selectedAccount {
     if (_selectedAccountId == null) return null;
-    for (final account in widget.accounts) {
+    for (final account
+        in ref.read(accountsProvider).value ?? <AccountModel>[]) {
       if (account.id == _selectedAccountId) return account;
     }
     return null;
@@ -97,9 +114,15 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (ref.read(cashBankControllerProvider).isLoading) return;
     final bool formValid = _formKey.currentState?.validate() ?? false;
 
-    if (_selectedContact == null) {
+    if (_selectedContact == null ||
+        !(ref
+                .read(contactsProvider)
+                .value
+                ?.any((c) => c.id == _selectedContact) ??
+            false)) {
       AppSnackBar.showError(context, 'Lütfen ilgili cariyi seçin');
       return;
     }
@@ -108,7 +131,10 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       return;
     }
     if (!formValid) {
-      AppSnackBar.showError(context, 'Lütfen zorunlu alanları eksiksiz ve doğru doldurun');
+      AppSnackBar.showError(
+        context,
+        'Lütfen zorunlu alanları eksiksiz ve doğru doldurun',
+      );
       return;
     }
 
@@ -126,9 +152,16 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     }
 
     final CashTransactionModel result = CashTransactionModel(
-      id: const Uuid().v4(),
+      id: widget.existingTransaction?.id ?? '',
       type: _transactionType,
-      contactName: _selectedContact!,
+      contactId: _selectedContact,
+      invoiceId: widget.existingTransaction?.invoiceId,
+      contactName: ref
+          .read(contactsProvider)
+          .requireValue
+          .firstWhere((c) => c.id == _selectedContact)
+          .name,
+      accountType: _selectedAccount!.type.name,
       accountId: _selectedAccount!.id,
       accountName: _selectedAccount!.name,
       amount: _amount,
@@ -136,6 +169,10 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       description: _descriptionController.text.trim(),
     );
 
+    final ok = await ref
+        .read(cashBankControllerProvider.notifier)
+        .saveTransaction(result, isNew: widget.existingTransaction == null);
+    if (!mounted || !ok) return;
     setState(() => _isDirty = false);
     AppSnackBar.showSuccess(
       context,
@@ -143,7 +180,9 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
           ? 'Tahsilat başarıyla kaydedildi'
           : 'Ödeme başarıyla kaydedildi',
     );
-    if (mounted) Navigator.of(context).pop(result);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
   }
 
   Future<void> _pickDate() async {
@@ -176,7 +215,9 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _transactionType == CashTransactionType.collection ? 'Tahsilat Al' : 'Ödeme Yap',
+            _transactionType == CashTransactionType.collection
+                ? 'Tahsilat Al'
+                : 'Ödeme Yap',
           ),
         ),
         body: Form(
@@ -206,36 +247,65 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedContact,
-                  decoration: const InputDecoration(labelText: 'İlgili Cari'),
-                  items: _mockContactNames
-                      .map((name) => DropdownMenuItem(value: name, child: Text(name)))
-                      .toList(),
-                  validator: (value) => value == null ? 'Lütfen bir cari seçin' : null,
+                ContactPicker(
+                  value: _selectedContact,
                   onChanged: (value) {
                     _markDirty();
                     setState(() => _selectedContact = value);
                   },
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedAccountId,
-                  decoration: const InputDecoration(labelText: 'Kasa / Banka Hesabı'),
-                  items: widget.accounts
-                      .map((account) => DropdownMenuItem(value: account.id, child: Text(account.name)))
-                      .toList(),
-                  validator: (value) => value == null ? 'Lütfen bir hesap seçin' : null,
-                  onChanged: (value) {
-                    _markDirty();
-                    setState(() => _selectedAccountId = value);
+                AsyncContent<List<AccountModel>>(
+                  value: ref.watch(accountsProvider),
+                  onRetry: () {
+                    ref.invalidate(transactionsProvider);
+                    ref.invalidate(accountsProvider);
+                  },
+                  data: (accounts) {
+                    if (accounts.isEmpty) {
+                      return const Text(
+                        'Kayıtlı hesap yok. Önce Kasa & Banka ekranından hesap ekleyin.',
+                      );
+                    }
+                    final selected =
+                        accounts.any((a) => a.id == _selectedAccountId)
+                        ? _selectedAccountId
+                        : null;
+                    return DropdownButtonFormField<String>(
+                      key: ValueKey(selected),
+                      initialValue: selected,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Kasa / Banka Hesabı',
+                      ),
+                      items: accounts
+                          .map(
+                            (account) => DropdownMenuItem(
+                              value: account.id,
+                              child: Text(
+                                account.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      validator: (value) =>
+                          value == null ? 'Lütfen bir hesap seçin' : null,
+                      onChanged: (value) {
+                        _markDirty();
+                        setState(() => _selectedAccountId = value);
+                      },
+                    );
                   },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _amountController,
                   decoration: const InputDecoration(labelText: 'Tutar'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: Validators.positiveNumber,
                 ),
                 if (_hasInsufficientBalance) ...[
@@ -243,7 +313,10 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                   Text(
                     'Yetersiz bakiye: mevcut bakiye '
                     '${CurrencyHelper.formatFromKurus(CurrencyHelper.liraToKurus(_selectedAccount!.balance))}',
-                    style: const TextStyle(color: AppTheme.expenseColor, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: AppTheme.expenseColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -261,8 +334,14 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Açıklama / Kategori'),
+                  decoration: const InputDecoration(
+                    labelText: 'Açıklama / Kategori',
+                  ),
                   maxLines: 2,
+                ),
+                MutationError(
+                  value: ref.watch(cashBankControllerProvider),
+                  onRetry: _handleSave,
                 ),
               ],
             ),
@@ -275,7 +354,14 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _handleSave,
+                onPressed:
+                    ref.watch(cashBankControllerProvider).isLoading ||
+                        ref.watch(accountsProvider).isLoading ||
+                        ref.watch(accountsProvider).hasError ||
+                        ref.watch(contactsProvider).isLoading ||
+                        ref.watch(contactsProvider).hasError
+                    ? null
+                    : _handleSave,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Kaydet'),
               ),
