@@ -190,6 +190,7 @@ create table if not exists public.invoice_items (
   quantity numeric(15, 2) not null default 1,
   unit_price numeric(15, 2) not null default 0,
   vat_rate numeric(5, 2) not null default 20,
+  discount_percent numeric default 0 check (discount_percent between 0 and 100),
   line_total numeric(15, 2) not null default 0,
   created_at timestamptz not null default now(),
   constraint invoice_items_invoice_id_fkey
@@ -349,13 +350,20 @@ begin
   ) returning id into v_invoice_id;
 
   insert into public.invoice_items (
-    user_id, invoice_id, description, quantity, unit_price, vat_rate, line_total
+    user_id, invoice_id, description, quantity, unit_price, vat_rate, discount_percent, line_total
   )
   select v_user_id, v_invoice_id, item ->> 'description',
     case when item ? 'quantity' then (item ->> 'quantity')::numeric else 1 end,
     case when item ? 'unit_price' then (item ->> 'unit_price')::numeric else 0 end,
     case when item ? 'vat_rate' then (item ->> 'vat_rate')::numeric else 20 end,
-    case when item ? 'line_total' then (item ->> 'line_total')::numeric else 0 end
+    coalesce((item ->> 'discount_percent')::numeric, 0),
+    round(
+      (case when item ? 'quantity' then (item ->> 'quantity')::numeric(15, 2) else 1 end)
+      * (case when item ? 'unit_price' then (item ->> 'unit_price')::numeric(15, 2) else 0 end)
+      * (1 - coalesce((item ->> 'discount_percent')::numeric, 0) / 100)
+      * (1 + (case when item ? 'vat_rate' then (item ->> 'vat_rate')::numeric(5, 2) else 20 end) / 100),
+      2
+    )
   from jsonb_array_elements(p_items) as items(item);
 
   return v_invoice_id;
