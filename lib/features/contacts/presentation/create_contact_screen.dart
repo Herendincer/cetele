@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import '../../../core/utils/currency_helper.dart';
+import 'controllers/contacts_controller.dart';
 
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/app_snackbar.dart';
@@ -7,17 +11,18 @@ import '../../../core/widgets/confirm_dialog.dart';
 import 'models/contact_model.dart';
 
 /// Yeni cari ekleme veya mevcut bir cariyi düzenleme formu.
-class CreateContactScreen extends StatefulWidget {
+class CreateContactScreen extends ConsumerStatefulWidget {
   const CreateContactScreen({super.key, this.existingContact});
 
   /// Doluysa düzenleme modunda açılır.
   final ContactModel? existingContact;
 
   @override
-  State<CreateContactScreen> createState() => _CreateContactScreenState();
+  ConsumerState<CreateContactScreen> createState() =>
+      _CreateContactScreenState();
 }
 
-class _CreateContactScreenState extends State<CreateContactScreen> {
+class _CreateContactScreenState extends ConsumerState<CreateContactScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _taxOfficeController;
@@ -25,7 +30,6 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
   late final TextEditingController _addressController;
-  late final TextEditingController _balanceController;
 
   late ContactType _contactType;
   bool _isDirty = false;
@@ -38,15 +42,15 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
     final contact = widget.existingContact;
     _contactType = contact?.type ?? ContactType.customer;
     _nameController = TextEditingController(text: contact?.name ?? '');
-    _taxOfficeController = TextEditingController(text: contact?.taxOffice ?? '');
-    _taxNumberController = TextEditingController(text: contact?.taxNumber ?? '');
+    _taxOfficeController = TextEditingController(
+      text: contact?.taxOffice ?? '',
+    );
+    _taxNumberController = TextEditingController(
+      text: contact?.taxNumber ?? '',
+    );
     _phoneController = TextEditingController(text: contact?.phone ?? '');
     _emailController = TextEditingController(text: contact?.email ?? '');
     _addressController = TextEditingController(text: contact?.address ?? '');
-    _balanceController = TextEditingController(
-      text: contact == null || contact.balance == 0 ? '' : contact.balance.toStringAsFixed(2),
-    );
-
     for (final controller in [
       _nameController,
       _taxOfficeController,
@@ -54,7 +58,6 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
       _phoneController,
       _emailController,
       _addressController,
-      _balanceController,
     ]) {
       controller.addListener(_markDirty);
     }
@@ -68,7 +71,6 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
-    _balanceController.dispose();
     super.dispose();
   }
 
@@ -86,19 +88,19 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
     );
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
+    if (ref.read(contactsControllerProvider).isLoading) return;
     final bool formValid = _formKey.currentState?.validate() ?? false;
     if (!formValid) {
-      AppSnackBar.showError(context, 'Lütfen zorunlu alanları eksiksiz ve doğru doldurun');
+      AppSnackBar.showError(
+        context,
+        'Lütfen zorunlu alanları eksiksiz ve doğru doldurun',
+      );
       return;
     }
 
-    final double balance = _balanceController.text.trim().isEmpty
-        ? 0
-        : double.parse(_balanceController.text.trim().replaceAll(',', '.'));
-
     final ContactModel result = ContactModel(
-      id: widget.existingContact?.id ?? const Uuid().v4(),
+      id: widget.existingContact?.id ?? '',
       type: _contactType,
       name: _nameController.text.trim(),
       taxOffice: _taxOfficeController.text.trim(),
@@ -106,15 +108,20 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
       phone: _phoneController.text.trim(),
       email: _emailController.text.trim(),
       address: _addressController.text.trim(),
-      balance: balance,
     );
 
+    final ok = await ref
+        .read(contactsControllerProvider.notifier)
+        .save(result, isNew: !_isEditing);
+    if (!mounted || !ok) return;
     setState(() => _isDirty = false);
     AppSnackBar.showSuccess(
       context,
       _isEditing ? 'Cari başarıyla güncellendi' : 'Cari başarıyla eklendi',
     );
-    Navigator.of(context).pop(result);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
   }
 
   @override
@@ -129,7 +136,9 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(_isEditing ? 'Cariyi Düzenle' : 'Yeni Cari Ekle')),
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Cariyi Düzenle' : 'Yeni Cari Ekle'),
+        ),
         body: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -149,6 +158,10 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
                       label: Text('Tedarikçi'),
                       icon: Icon(Icons.local_shipping_outlined),
                     ),
+                    ButtonSegment(
+                      value: ContactType.both,
+                      label: Text('Her ikisi'),
+                    ),
                   ],
                   selected: {_contactType},
                   onSelectionChanged: (selection) {
@@ -159,7 +172,9 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Unvan / Ad Soyad'),
+                  decoration: const InputDecoration(
+                    labelText: 'Unvan / Ad Soyad',
+                  ),
                   validator: Validators.required,
                   textInputAction: TextInputAction.next,
                 ),
@@ -172,7 +187,9 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _taxNumberController,
-                  decoration: const InputDecoration(labelText: 'Vergi No / TC Kimlik No'),
+                  decoration: const InputDecoration(
+                    labelText: 'Vergi No / TC Kimlik No',
+                  ),
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.next,
                 ),
@@ -191,7 +208,8 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
                   textInputAction: TextInputAction.next,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) return null;
-                    final bool isValid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim());
+                    final bool isValid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                        .hasMatch(value.trim());
                     return isValid ? null : 'Geçerli bir e-posta adresi girin';
                   },
                 ),
@@ -203,18 +221,33 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _balanceController,
-                  decoration: const InputDecoration(
-                    labelText: 'Açılış Bakiyesi',
-                    helperText: 'Pozitif: alacak, negatif: borç (varsa)',
+                if (_isEditing)
+                  AsyncContent<ContactModel?>(
+                    value: ref.watch(
+                      contactProvider(widget.existingContact!.id),
+                    ),
+                    onRetry: () => ref.invalidate(contactsProvider),
+                    data: (contact) => InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Güncel Bakiye',
+                      ),
+                      child: Text(
+                        contact == null
+                            ? 'Cari bulunamadı'
+                            : CurrencyHelper.formatFromKurus(
+                                CurrencyHelper.liraToKurus(contact.balance),
+                              ),
+                      ),
+                    ),
+                  )
+                else
+                  const InputDecorator(
+                    decoration: InputDecoration(labelText: 'Güncel Bakiye'),
+                    child: Text('0,00 ₺'),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) return null;
-                    final double? parsed = double.tryParse(value.trim().replaceAll(',', '.'));
-                    return parsed == null ? 'Geçerli bir tutar girin' : null;
-                  },
+                MutationError(
+                  value: ref.watch(contactsControllerProvider),
+                  onRetry: _handleSave,
                 ),
               ],
             ),
@@ -227,7 +260,9 @@ class _CreateContactScreenState extends State<CreateContactScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _handleSave,
+                onPressed: ref.watch(contactsControllerProvider).isLoading
+                    ? null
+                    : _handleSave,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Kaydet'),
               ),

@@ -4,11 +4,17 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_helper.dart';
 import '../../../core/widgets/app_snackbar.dart';
 import '../../../core/widgets/confirm_dialog.dart';
-import '../../cash_bank/presentation/mock_cash_data.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/async_content.dart';
+import 'controllers/contacts_controller.dart';
 import 'contact_detail_screen.dart';
 import 'create_contact_screen.dart';
 import 'models/contact_model.dart';
 
+// Eski örnekler, kullanıcı testinden sonra kaldırılacak.
+// ignore: unused_element
 final List<ContactModel> _mockContacts = [
   const ContactModel(
     id: 'c1',
@@ -53,14 +59,14 @@ final List<ContactModel> _mockContacts = [
 ];
 
 /// Müşteri ve tedarikçi cari kartlarını bakiyeleriyle listeleyen ekran.
-class ContactsScreen extends StatefulWidget {
+class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});
 
   @override
-  State<ContactsScreen> createState() => _ContactsScreenState();
+  ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
 }
 
-class _ContactsScreenState extends State<ContactsScreen> {
+class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
 
@@ -70,10 +76,12 @@ class _ContactsScreenState extends State<ContactsScreen> {
     super.dispose();
   }
 
-  List<ContactModel> _filter(ContactType type) {
+  List<ContactModel> _filter(List<ContactModel> contacts, ContactType type) {
     final String query = _query.trim().toLowerCase();
-    return _mockContacts.where((contact) {
-      if (contact.type != type) return false;
+    return contacts.where((contact) {
+      if (contact.type != type && contact.type != ContactType.both) {
+        return false;
+      }
       if (query.isEmpty) return true;
       return contact.name.toLowerCase().contains(query) ||
           contact.taxNumber.toLowerCase().contains(query);
@@ -81,34 +89,25 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   Future<void> _openCreateContact(BuildContext context) async {
-    final ContactModel? created = await Navigator.of(context).push<ContactModel>(
+    await Navigator.of(context).push<ContactModel>(
       MaterialPageRoute(builder: (_) => const CreateContactScreen()),
     );
-    if (created == null) return;
-    setState(() => _mockContacts.add(created));
   }
 
-  Future<void> _openEditContact(BuildContext context, ContactModel contact) async {
-    final ContactModel? updated = await Navigator.of(context).push<ContactModel>(
-      MaterialPageRoute(builder: (_) => CreateContactScreen(existingContact: contact)),
+  Future<void> _openEditContact(
+    BuildContext context,
+    ContactModel contact,
+  ) async {
+    await Navigator.of(context).push<ContactModel>(
+      MaterialPageRoute(
+        builder: (_) => CreateContactScreen(existingContact: contact),
+      ),
     );
-    if (updated == null) return;
-    setState(() {
-      final int index = _mockContacts.indexWhere((c) => c.id == updated.id);
-      if (index != -1) _mockContacts[index] = updated;
-    });
   }
 
   void _openContactDetail(BuildContext context, ContactModel contact) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ContactDetailScreen(
-          contact: contact,
-          transactions: mockCashTransactions
-              .where((transaction) => transaction.contactName == contact.name)
-              .toList(),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => ContactDetailScreen(contact: contact)),
     );
   }
 
@@ -116,13 +115,27 @@ class _ContactsScreenState extends State<ContactsScreen> {
     final bool confirmed = await showConfirmDialog(
       context,
       title: 'Cariyi Sil',
-      message:
-          'Bu cari hesabı silmek istediğinize emin misiniz? Varsa geçmiş hareketleri etkilenebilir.',
+      message: 'Bu cari hesabı silmek istediğinize emin misiniz? Varsa geçmiş hareketleri etkilenebilir.',
       confirmLabel: 'Sil',
     );
     if (!confirmed || !mounted) return;
-    setState(() => _mockContacts.removeWhere((c) => c.id == contact.id));
-    if (mounted) AppSnackBar.showSuccess(context, 'Cari silindi');
+    final ok = await ref
+        .read(contactsControllerProvider.notifier)
+        .delete(contact.id);
+    if (!mounted) return;
+    if (ok) {
+      AppSnackBar.showSuccess(context, 'Cari silindi');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Cari silinemedi'),
+          action: SnackBarAction(
+            label: 'Tekrar dene',
+            onPressed: () => _deleteContact(contact),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -169,21 +182,25 @@ class _ContactsScreenState extends State<ContactsScreen> {
               ),
             ),
             Expanded(
-              child: TabBarView(
-                children: [
-                  _ContactList(
-                    contacts: _filter(ContactType.customer),
-                    onTap: (contact) => _openContactDetail(context, contact),
-                    onEdit: (contact) => _openEditContact(context, contact),
-                    onDelete: _deleteContact,
-                  ),
-                  _ContactList(
-                    contacts: _filter(ContactType.supplier),
-                    onTap: (contact) => _openContactDetail(context, contact),
-                    onEdit: (contact) => _openEditContact(context, contact),
-                    onDelete: _deleteContact,
-                  ),
-                ],
+              child: AsyncContent<List<ContactModel>>(
+                value: ref.watch(contactsProvider),
+                onRetry: () => ref.invalidate(contactsProvider),
+                data: (contacts) => TabBarView(
+                  children: [
+                    _ContactList(
+                      contacts: _filter(contacts, ContactType.customer),
+                      onTap: (contact) => _openContactDetail(context, contact),
+                      onEdit: (contact) => _openEditContact(context, contact),
+                      onDelete: _deleteContact,
+                    ),
+                    _ContactList(
+                      contacts: _filter(contacts, ContactType.supplier),
+                      onTap: (contact) => _openContactDetail(context, contact),
+                      onEdit: (contact) => _openEditContact(context, contact),
+                      onDelete: _deleteContact,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -234,9 +251,15 @@ class _ContactList extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    backgroundColor: AppTheme.primaryColor.withValues(
+                      alpha: 0.1,
+                    ),
                     foregroundColor: AppTheme.primaryColor,
-                    child: Text(contact.name.substring(0, 1).toUpperCase()),
+                    child: Text(
+                      contact.name.isEmpty
+                          ? '?'
+                          : contact.name.substring(0, 1).toUpperCase(),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -259,34 +282,39 @@ class _ContactList extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        isSettled
-                            ? 'Bakiye yok'
-                            : '${isReceivable ? 'Alacak' : 'Borç'}: ${CurrencyHelper.formatFromKurus(kurus)}',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(color: color, fontWeight: FontWeight.w700),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Cariyi düzenle',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => onEdit(contact),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          isSettled
+                              ? 'Bakiye yok'
+                              : '${isReceivable ? 'Alacak' : 'Borç'}: ${CurrencyHelper.formatFromKurus(kurus)}',
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w700,
                           ),
-                          IconButton(
-                            tooltip: 'Cariyi sil',
-                            icon: const Icon(Icons.delete_outline),
-                            color: AppTheme.expenseColor,
-                            onPressed: () => onDelete(contact),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Cariyi düzenle',
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () => onEdit(contact),
+                            ),
+                            IconButton(
+                              tooltip: 'Cariyi sil',
+                              icon: const Icon(Icons.delete_outline),
+                              color: AppTheme.expenseColor,
+                              onPressed: () => onDelete(contact),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
