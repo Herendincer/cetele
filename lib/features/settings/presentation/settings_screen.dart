@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/services/subscription_service.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/app_snackbar.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/screens/existing_account_dialog.dart';
@@ -24,6 +26,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _openPaywall(BuildContext context) async {
     await Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
+  }
+
+  Future<void> _manageSubscription() async {
+    try {
+      if (await launchUrl(
+        Uri.parse(AppConstants.manageSubscriptionsUrl),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      // Ortak Türkçe hata gösterilir.
+    }
+    if (mounted) AppSnackBar.showError(context, 'Abonelik yönetimi açılamadı.');
   }
 
   Future<void> _signInWithProvider(OAuthProvider provider) async {
@@ -156,19 +172,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
           ),
           Card(
-            child: ListTile(
-              leading: Icon(
-                isPro
-                    ? Icons.workspace_premium
-                    : Icons.workspace_premium_outlined,
-                color: isPro ? Colors.amber.shade700 : null,
-              ),
-              title: const Text('Çetele Pro / Abonelik'),
-              subtitle: subscriptionStatus.isLoading
-                  ? const Text('Kontrol ediliyor...')
-                  : Text(isPro ? 'Pro' : 'Ücretsiz'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openPaywall(context),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  leading: Icon(
+                    isPro
+                        ? Icons.workspace_premium
+                        : Icons.workspace_premium_outlined,
+                    color: isPro ? Colors.amber.shade700 : null,
+                  ),
+                  title: const Text('Planım'),
+                  subtitle: subscriptionStatus.isLoading
+                      ? const Text('Kontrol ediliyor...')
+                      : Text(isPro ? 'Pro' : 'Ücretsiz'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _openPaywall(context),
+                ),
+                if (subscriptionStatus.hasError ||
+                    subscriptionStatus.value == SubscriptionStatus.unavailable)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Abonelik durumu şu anda doğrulanamıyor.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                TextButton(
+                  onPressed: isPro
+                      ? _manageSubscription
+                      : () => _openPaywall(context),
+                  child: Text(
+                    isPro
+                        ? 'Aboneliği Yönet'
+                        : (isAnonymous
+                              ? 'Google ile giriş yapıp Pro’ya geç'
+                              : 'Pro’ya Yükselt'),
+                  ),
+                ),
+              ],
             ),
           ),
           Card(
