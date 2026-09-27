@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/subscription_service.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../subscription/presentation/subscription_entry.dart';
 
 /// Hesap değişince provider önbelleklerini ve tüm Navigator rotalarını siler.
 /// Eski hesaba ait geç tamamlanan istekler yeni kapsama sonuç yazamaz.
@@ -48,6 +49,7 @@ class _AuthSessionScopeState extends State<AuthSessionScope> {
   }
 
   void _changeSession(User? user) {
+    if (user == null) SubscriptionIntent.pending = false;
     _userId = user?.id;
     _anonymous = user?.isAnonymous;
     final revision = ++_revision;

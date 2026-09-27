@@ -5,6 +5,7 @@ import 'package:cetele/core/providers/data_providers.dart';
 import 'package:cetele/core/services/subscription_service.dart';
 import 'package:cetele/core/services/supabase_service.dart';
 import 'package:cetele/features/auth/screens/auth_session_scope.dart';
+import 'package:cetele/features/subscription/presentation/subscription_entry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,6 +55,7 @@ void main() {
     calls = [];
     pendingLogin = null;
     failLogin = false;
+    SubscriptionIntent.pending = false;
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -112,6 +114,31 @@ void main() {
         throwsStateError,
       );
       expect(calls, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'subscription intent survives anonymous upgrade and opens paywall once',
+    (tester) async {
+      await setSession('guest', anonymous: true);
+      await tester.pumpWidget(
+        const AuthSessionScope(
+          child: MaterialApp(
+            home: SubscriptionEntry(child: Scaffold(body: Text('Ana ekran'))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      SubscriptionIntent.pending = true;
+      await setSession('guest');
+      await tester.pumpAndSettle();
+      expect(find.text('Çetele Pro'), findsOneWidget);
+      expect(SubscriptionIntent.pending, isFalse);
+      expect(calls, isNot(contains('purchasePackage')));
+      final context = tester.element(find.text('Çetele Pro'));
+      Navigator.of(context).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Ana ekran'), findsOneWidget);
     },
   );
 

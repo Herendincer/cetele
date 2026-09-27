@@ -107,9 +107,9 @@ class SubscriptionService {
 
   /// Aylık abonelik paketini satın alır ve "pro" entitlement'ının aktif olup
   /// olmadığını döner.
-  static Future<bool> purchaseMonthlySubscription() async {
+  static Future<bool> purchaseMonthlySubscription({Package? package}) async {
     final userId = _requireIdentifiedCustomer();
-    final package = await getMonthlyPackage();
+    package ??= await getMonthlyPackage();
     if (package == null) {
       throw Exception('Kullanılabilir bir abonelik paketi bulunamadı');
     }
@@ -211,8 +211,10 @@ class SubscriptionStatusController extends AsyncNotifier<SubscriptionStatus> {
     if (ref.mounted && revision == _revision) state = result;
   }
 
-  Future<bool> purchaseMonthly() async {
-    final isPro = await SubscriptionService.purchaseMonthlySubscription();
+  Future<bool> purchaseMonthly(Package package) async {
+    final isPro = await SubscriptionService.purchaseMonthlySubscription(
+      package: package,
+    );
     if (ref.mounted) await refresh();
     return isPro;
   }

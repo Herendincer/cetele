@@ -11,6 +11,7 @@ import 'core/widgets/app_shell.dart';
 import 'features/auth/providers/auth_providers.dart';
 import 'features/auth/screens/auth_screen.dart';
 import 'features/auth/screens/auth_session_scope.dart';
+import 'features/subscription/presentation/subscription_entry.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,9 @@ class MyApp extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode.themeMode,
-      home: user == null ? const AuthScreen() : const AppShell(),
+      home: user == null
+          ? const AuthScreen()
+          : const SubscriptionEntry(child: AppShell()),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cetele/main.dart';
 import 'package:cetele/core/widgets/app_shell.dart';
 import 'package:cetele/features/auth/screens/existing_account_dialog.dart';
+import 'package:cetele/features/subscription/presentation/paywall_screen.dart';
 
 void main() {
   setUpAll(() async {
@@ -36,6 +37,21 @@ void main() {
   });
 
   tearDown(() => Supabase.instance.dispose());
+
+  testWidgets('guest paywall requires sign-in and exposes no purchase action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: PaywallScreen(limitReached: true)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Bu ay ücretsiz fatura hakkınız doldu'), findsOneWidget);
+    expect(find.text('Google ile Giriş Yap'), findsOneWidget);
+    expect(find.text('Satın Al'), findsNothing);
+    expect(find.text('Satın Almaları Geri Yükle'), findsNothing);
+  });
 
   testWidgets('cold start shows auth options at 320px without overflow', (
     tester,
