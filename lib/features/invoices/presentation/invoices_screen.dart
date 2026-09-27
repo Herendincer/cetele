@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_helper.dart';
 import 'create_invoice_screen.dart';
 import 'invoice_details_screen.dart';
+import 'invoice_creation_gate.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,16 +18,15 @@ import 'models/invoice_type.dart';
 class InvoicesScreen extends ConsumerWidget {
   const InvoicesScreen({super.key});
 
-  void _openCreateInvoice(BuildContext context) {
+  Future<void> _openCreateInvoice(BuildContext context, WidgetRef ref) async {
     final int activeTab = DefaultTabController.of(context).index;
+    final type = activeTab == 0 ? InvoiceType.sales : InvoiceType.purchase;
+    if (!await checkInvoiceCreationAllowed(context, ref, type) ||
+        !context.mounted) {
+      return;
+    }
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CreateInvoiceScreen(
-          initialType: activeTab == 0
-              ? InvoiceType.sales
-              : InvoiceType.purchase,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => CreateInvoiceScreen(initialType: type)),
     );
   }
 
@@ -46,7 +46,7 @@ class InvoicesScreen extends ConsumerWidget {
         ),
         floatingActionButton: Builder(
           builder: (context) => FloatingActionButton.extended(
-            onPressed: () => _openCreateInvoice(context),
+            onPressed: () => _openCreateInvoice(context, ref),
             icon: const Icon(Icons.add),
             label: const Text('Fatura Oluştur'),
           ),

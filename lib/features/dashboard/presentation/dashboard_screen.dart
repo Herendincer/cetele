@@ -7,6 +7,7 @@ import '../../../core/utils/currency_helper.dart';
 import '../../cash_bank/presentation/create_transaction_screen.dart';
 import '../../cash_bank/presentation/models/cash_transaction_model.dart';
 import '../../invoices/presentation/create_invoice_screen.dart';
+import '../../invoices/presentation/invoice_creation_gate.dart';
 import '../../invoices/presentation/invoice_details_screen.dart';
 import '../../invoices/presentation/models/invoice_type.dart';
 import 'controllers/dashboard_controller.dart';
@@ -27,6 +28,10 @@ class DashboardScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
+    if (!await checkInvoiceCreationAllowed(context, ref, InvoiceType.sales) ||
+        !context.mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>

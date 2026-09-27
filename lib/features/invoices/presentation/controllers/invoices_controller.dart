@@ -4,6 +4,7 @@ import '../../../../core/providers/data_providers.dart';
 import '../../../dashboard/presentation/controllers/dashboard_controller.dart';
 import '../../data/invoices_repository.dart';
 import '../models/invoice_model.dart';
+import 'invoice_creation_policy.dart';
 
 class InvoicesData extends AsyncNotifier<List<InvoiceModel>> {
   @override
@@ -40,8 +41,12 @@ class InvoicesController extends AsyncNotifier<void> {
     ref.watch(sessionUserIdProvider);
   }
 
-  Future<bool> create(InvoiceModel invoice) =>
-      _run((id) => ref.read(invoicesRepositoryProvider).create(id, invoice));
+  Future<bool> create(InvoiceModel invoice) => _run((id) async {
+    // Form açıkken kullanım başka cihazda değişmiş olabilir; kayıtta tekrar say.
+    await ref.read(invoiceCreationPolicyProvider).ensureAllowed(invoice.type);
+    if (!ref.mounted) return;
+    await ref.read(invoicesRepositoryProvider).create(id, invoice);
+  });
   Future<bool> updateStatus(String invoiceId, InvoiceStatus status) => _run(
     (id) => ref
         .read(invoicesRepositoryProvider)

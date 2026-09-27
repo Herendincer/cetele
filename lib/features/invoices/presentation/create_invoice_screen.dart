@@ -6,6 +6,8 @@ import '../../../core/widgets/async_content.dart';
 import '../../contacts/presentation/widgets/contact_picker.dart';
 import '../../contacts/presentation/controllers/contacts_controller.dart';
 import 'controllers/invoices_controller.dart';
+import 'controllers/invoice_creation_policy.dart';
+import 'invoice_creation_gate.dart';
 import 'models/invoice_model.dart';
 
 import '../../../core/utils/validators.dart';
@@ -185,7 +187,14 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     final ok = await ref
         .read(invoicesControllerProvider.notifier)
         .create(invoice);
-    if (!mounted || !ok) return;
+    if (!mounted) return;
+    if (!ok) {
+      if (ref.read(invoicesControllerProvider).error
+          is SalesInvoiceLimitReached) {
+        await showInvoiceLimitPaywall(context);
+      }
+      return;
+    }
     setState(() => _isDirty = false);
     AppSnackBar.showSuccess(context, 'Fatura başarıyla kaydedildi');
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -240,7 +249,15 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             ),
                           ],
                           selected: {_invoiceType},
-                          onSelectionChanged: (selection) {
+                          onSelectionChanged: (selection) async {
+                            if (!await checkInvoiceCreationAllowed(
+                                  context,
+                                  ref,
+                                  selection.first,
+                                ) ||
+                                !mounted) {
+                              return;
+                            }
                             _markDirty();
                             setState(() => _invoiceType = selection.first);
                           },

@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:cetele/core/providers/data_providers.dart';
+import 'package:cetele/core/services/subscription_service.dart';
 import 'package:cetele/features/contacts/data/contacts_repository.dart';
 import 'package:cetele/features/contacts/presentation/controllers/contacts_controller.dart';
 import 'package:cetele/features/contacts/presentation/contacts_screen.dart';
@@ -135,6 +136,9 @@ class FakeInvoices extends InvoicesRepository {
   List<InvoiceModel> rows = [];
   InvoiceStatus? lastStatus;
   @override
+  Future<int> countMonthlySalesInvoices() async =>
+      rows.where((invoice) => invoice.type == InvoiceType.sales).length;
+  @override
   Future<List<InvoiceModel>> fetch(String userId) async => [...rows];
   @override
   Future<void> create(String userId, InvoiceModel invoice) async {
@@ -156,6 +160,11 @@ class FakeInvoices extends InvoicesRepository {
   }
 }
 
+class FreeSubscription extends SubscriptionStatusController {
+  @override
+  Future<SubscriptionStatus> build() async => SubscriptionStatus.free;
+}
+
 void main() {
   late SupabaseClient client;
   late FakeContacts contacts;
@@ -175,6 +184,7 @@ void main() {
     container = ProviderContainer(
       retry: (count, error) => null,
       overrides: [
+        subscriptionStatusProvider.overrideWith(FreeSubscription.new),
         sessionUserIdProvider.overrideWith((ref) => Stream.value(userId)),
         contactsRepositoryProvider.overrideWithValue(contacts),
         accountsRepositoryProvider.overrideWithValue(accounts),
