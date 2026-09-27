@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -15,14 +16,17 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   bool _isLoading = false;
 
-  Future<void> _continueWithGoogle() async {
+  Future<void> _continueWithProvider(OAuthProvider provider) async {
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.signInWithGoogle();
-      if (mounted) Navigator.of(context).pop();
+      final signedIn = await SupabaseService.signInWithProvider(provider);
+      if (signedIn && mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        AppSnackBar.showError(context, 'Google ile giriş yapılamadı: $e');
+        AppSnackBar.showError(
+          context,
+          'Giriş yapılamadı. Lütfen tekrar deneyin.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -71,7 +75,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _isLoading ? null : _continueWithGoogle,
+                    onPressed: _isLoading
+                        ? null
+                        : () => _continueWithProvider(OAuthProvider.google),
                     icon: const Icon(Icons.login),
                     label: const Text('Google ile Devam Et'),
                   ),

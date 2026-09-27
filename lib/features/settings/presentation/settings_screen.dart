@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_controller.dart';
@@ -20,18 +21,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isProcessingAuth = false;
 
   Future<void> _openPaywall(BuildContext context) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PaywallScreen()),
-    );
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
   }
 
-  Future<void> _signInWithGoogle() async {
+  Future<void> _signInWithProvider(OAuthProvider provider) async {
     setState(() => _isProcessingAuth = true);
     try {
-      await SupabaseService.signInWithGoogle();
+      await SupabaseService.signInWithProvider(provider);
     } catch (e) {
       if (mounted) {
-        AppSnackBar.showError(context, 'Google ile giriş yapılamadı: $e');
+        AppSnackBar.showError(
+          context,
+          'Giriş yapılamadı. Lütfen tekrar deneyin.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isProcessingAuth = false);
@@ -78,7 +81,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
     if (selectedMode != null) {
-      await ref.read(themeControllerProvider.notifier).setThemeMode(selectedMode);
+      await ref
+          .read(themeControllerProvider.notifier)
+          .setThemeMode(selectedMode);
     }
   }
 
@@ -97,7 +102,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Card(
-            color: isAnonymous ? AppTheme.primaryColor.withValues(alpha: 0.08) : null,
+            color: isAnonymous
+                ? AppTheme.primaryColor.withValues(alpha: 0.08)
+                : null,
             child: isAnonymous
                 ? ListTile(
                     leading: _isProcessingAuth
@@ -106,12 +113,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             height: 24,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(Icons.cloud_off_outlined, color: AppTheme.primaryColor),
+                        : Icon(
+                            Icons.cloud_off_outlined,
+                            color: AppTheme.primaryColor,
+                          ),
                     title: const Text('Google ile Giriş Yap / Hesabını Bağla'),
                     subtitle: const Text(
                       'Verilerinizi ve aboneliğinizi buluta yedeklemek için Google ile Giriş Yapın',
                     ),
-                    onTap: _isProcessingAuth ? null : _signInWithGoogle,
+                    onTap: _isProcessingAuth
+                        ? null
+                        : () => _signInWithProvider(OAuthProvider.google),
                   )
                 : ListTile(
                     leading: const Icon(Icons.account_circle_outlined),
@@ -132,7 +144,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Card(
             child: ListTile(
               leading: Icon(
-                isPro ? Icons.workspace_premium : Icons.workspace_premium_outlined,
+                isPro
+                    ? Icons.workspace_premium
+                    : Icons.workspace_premium_outlined,
                 color: isPro ? Colors.amber.shade700 : null,
               ),
               title: const Text('Çetele Pro / Abonelik'),

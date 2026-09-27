@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_constants.dart';
@@ -6,8 +8,9 @@ import '../constants/app_constants.dart';
 class SupabaseService {
   SupabaseService._();
 
-  /// Google OAuth/linkIdentity akışından uygulamaya dönüş için deep link şeması.
-  static const String _oauthRedirect = 'io.cetele.auth://login-callback';
+  static Future<void>? _providerInitialization;
+  static const _serverClientId =
+      '535679213005-gmgpu0kkt39q8i7qts0v8e9ketf8phav.apps.googleusercontent.com';
 
   /// main() içinde çağrılmalıdır.
   static Future<void> initialize() async {
@@ -40,19 +43,53 @@ class SupabaseService {
     }
   }
 
-  /// Google ile giriş yapar. Kullanıcı misafirse mevcut anonim oturumu Google
-  /// kimliğine bağlayarak cariler/faturalar gibi verilerin korunmasını sağlar.
-  static Future<void> signInWithGoogle() async {
-    if (isAnonymous && currentUser != null) {
-      await client.auth.linkIdentity(
-        OAuthProvider.google,
-        redirectTo: _oauthRedirect,
+  /// Sağlayıcının native kimlik bilgileriyle giriş yapar veya misafiri yükseltir.
+  /// Kullanıcının hesap seçimini iptal etmesi normal bir sonuçtur.
+  static Future<bool> signInWithProvider(OAuthProvider provider) async {
+    if (provider != OAuthProvider.google ||
+        kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      throw const AuthException(
+        'Bu giriş yöntemi bu platformda henüz desteklenmiyor.',
       );
-    } else {
-      await client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: _oauthRedirect,
+    }
+    try {
+      await (_providerInitialization ??= GoogleSignIn.instance.initialize(
+        serverClientId: _serverClientId,
+      ));
+    } catch (_) {
+      _providerInitialization = null;
+      rethrow;
+    }
+    try {
+      const scopes = ['email', 'profile'];
+      final account = await GoogleSignIn.instance.authenticate(
+        scopeHint: scopes,
       );
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        throw const AuthException('Kimlik doğrulama bilgisi alınamadı.');
+      }
+      final authorization =
+          await account.authorizationClient.authorizationForScopes(scopes) ??
+          await account.authorizationClient.authorizeScopes(scopes);
+      if (isAnonymous) {
+        await client.auth.linkIdentityWithIdToken(
+          provider: provider,
+          idToken: idToken,
+          accessToken: authorization.accessToken,
+        );
+      } else {
+        await client.auth.signInWithIdToken(
+          provider: provider,
+          idToken: idToken,
+          accessToken: authorization.accessToken,
+        );
+      }
+      return true;
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) return false;
+      rethrow;
     }
   }
 }
