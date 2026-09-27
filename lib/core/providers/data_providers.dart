@@ -3,6 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
 
+// Hata ekranı otomatik tekrar denemeyle yeniden yükleme durumuna dönmesin.
+// Veri okumaları ekrandaki "Tekrar dene" veya yenileme işlemiyle tekrarlanır.
+Duration? manualDataRetry(int retryCount, Object error) => null;
+
 final supabaseClientProvider = Provider<SupabaseClient>(
   (ref) => SupabaseService.client,
 );

@@ -111,6 +111,7 @@ class DashboardController extends AsyncNotifier<DashboardMetrics> {
 final dashboardControllerProvider =
     AsyncNotifierProvider<DashboardController, DashboardMetrics>(
       DashboardController.new,
+      retry: manualDataRetry,
     );
 
 class RecentActivities extends AsyncNotifier<List<RecentActivityEntry>> {
@@ -134,4 +135,5 @@ class RecentActivities extends AsyncNotifier<List<RecentActivityEntry>> {
 final recentActivitiesProvider =
     AsyncNotifierProvider<RecentActivities, List<RecentActivityEntry>>(
       RecentActivities.new,
+      retry: manualDataRetry,
     );

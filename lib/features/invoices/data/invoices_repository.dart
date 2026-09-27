@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/data_providers.dart';
+import '../../../core/services/supabase_request.dart';
 import '../presentation/models/invoice_model.dart';
 
 class InvoicesRepository {
@@ -16,28 +17,34 @@ class InvoicesRepository {
         )
         .eq('user_id', userId)
         .order('issue_date', ascending: false)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .withRequestTimeout();
     return rows.map(InvoiceModel.fromJson).toList();
   }
 
   Future<void> create(String userId, InvoiceModel invoice) async {
     // RPC kullanıcıyı auth.uid() ile belirler; fatura + kalemler atomiktir.
-    await client.rpc(
-      'create_invoice_with_items',
-      params: {
-        'p_invoice_number': invoice.number,
-        'p_type': invoice.type.name,
-        'p_contact_id': invoice.contactId,
-        'p_status': invoice.status.name,
-        'p_issue_date': invoice.issueDate.toIso8601String().substring(0, 10),
-        'p_due_date': invoice.dueDate?.toIso8601String().substring(0, 10),
-        'p_subtotal': invoice.subtotal,
-        'p_vat_amount': invoice.totalVat,
-        'p_total_amount': invoice.grandTotal,
-        'p_notes': invoice.notes,
-        'p_items': invoice.items.map((item) => item.toJson()).toList(),
-      },
-    );
+    await client
+        .rpc(
+          'create_invoice_with_items',
+          params: {
+            'p_invoice_number': invoice.number,
+            'p_type': invoice.type.name,
+            'p_contact_id': invoice.contactId,
+            'p_status': invoice.status.name,
+            'p_issue_date': invoice.issueDate.toIso8601String().substring(
+              0,
+              10,
+            ),
+            'p_due_date': invoice.dueDate?.toIso8601String().substring(0, 10),
+            'p_subtotal': invoice.subtotal,
+            'p_vat_amount': invoice.totalVat,
+            'p_total_amount': invoice.grandTotal,
+            'p_notes': invoice.notes,
+            'p_items': invoice.items.map((item) => item.toJson()).toList(),
+          },
+        )
+        .withRequestTimeout();
   }
 
   Future<void> updateStatus(
@@ -51,7 +58,8 @@ class InvoicesRepository {
         .eq('user_id', userId)
         .eq('id', id)
         .select()
-        .single();
+        .single()
+        .withRequestTimeout();
   }
 
   Future<void> delete(String userId, String id) async {
@@ -61,7 +69,8 @@ class InvoicesRepository {
         .eq('user_id', userId)
         .eq('id', id)
         .select()
-        .single();
+        .single()
+        .withRequestTimeout();
   }
 }
 

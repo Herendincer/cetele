@@ -17,7 +17,10 @@ class ContactsData extends AsyncNotifier<List<ContactModel>> {
 }
 
 final contactsProvider =
-    AsyncNotifierProvider<ContactsData, List<ContactModel>>(ContactsData.new);
+    AsyncNotifierProvider<ContactsData, List<ContactModel>>(
+      ContactsData.new,
+      retry: manualDataRetry,
+    );
 
 final contactProvider = Provider.family<AsyncValue<ContactModel?>, String>((
   ref,

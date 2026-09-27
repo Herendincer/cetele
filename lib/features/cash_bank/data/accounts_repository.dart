@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/data_providers.dart';
+import '../../../core/services/supabase_request.dart';
 import '../../../core/utils/currency_helper.dart';
 import '../presentation/models/account_model.dart';
 
@@ -14,7 +15,8 @@ class AccountsRepository {
         .from('accounts')
         .select()
         .eq('user_id', userId)
-        .order('created_at');
+        .order('created_at')
+        .withRequestTimeout();
     return rows.map(AccountModel.fromJson).toList();
   }
 
@@ -30,7 +32,10 @@ class AccountsRepository {
       'opening_balance': CurrencyHelper.liraToKurus(account.openingBalance),
     };
     if (isNew) {
-      await client.from('accounts').insert({...values, 'user_id': userId});
+      await client.from('accounts').insert({
+        ...values,
+        'user_id': userId,
+      }).withRequestTimeout();
     } else {
       await client
           .from('accounts')
@@ -38,7 +43,8 @@ class AccountsRepository {
           .eq('user_id', userId)
           .eq('id', account.id)
           .select()
-          .single();
+          .single()
+          .withRequestTimeout();
     }
   }
 
@@ -50,7 +56,8 @@ class AccountsRepository {
         .eq('user_id', userId)
         .eq('id', id)
         .select()
-        .single();
+        .single()
+        .withRequestTimeout();
   }
 }
 

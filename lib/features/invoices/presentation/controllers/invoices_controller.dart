@@ -17,7 +17,10 @@ class InvoicesData extends AsyncNotifier<List<InvoiceModel>> {
 }
 
 final invoicesProvider =
-    AsyncNotifierProvider<InvoicesData, List<InvoiceModel>>(InvoicesData.new);
+    AsyncNotifierProvider<InvoicesData, List<InvoiceModel>>(
+      InvoicesData.new,
+      retry: manualDataRetry,
+    );
 
 final invoiceProvider = Provider.family<AsyncValue<InvoiceModel?>, String>((
   ref,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/data_providers.dart';
+import '../../../core/services/supabase_request.dart';
 import '../presentation/models/contact_model.dart';
 
 class ContactsRepository {
@@ -13,7 +14,8 @@ class ContactsRepository {
         .from('contacts')
         .select()
         .eq('user_id', userId)
-        .order('name');
+        .order('name')
+        .withRequestTimeout();
     return rows.map(ContactModel.fromJson).toList();
   }
 
@@ -25,7 +27,10 @@ class ContactsRepository {
     // balance yalnızca veritabanı trigger'ları tarafından hesaplanır.
     final values = contact.toJson();
     if (isNew) {
-      await client.from('contacts').insert({...values, 'user_id': userId});
+      await client.from('contacts').insert({
+        ...values,
+        'user_id': userId,
+      }).withRequestTimeout();
     } else {
       await client
           .from('contacts')
@@ -33,7 +38,8 @@ class ContactsRepository {
           .eq('user_id', userId)
           .eq('id', contact.id)
           .select()
-          .single();
+          .single()
+          .withRequestTimeout();
     }
   }
 
@@ -44,7 +50,8 @@ class ContactsRepository {
         .eq('user_id', userId)
         .eq('id', id)
         .select()
-        .single();
+        .single()
+        .withRequestTimeout();
   }
 }
 

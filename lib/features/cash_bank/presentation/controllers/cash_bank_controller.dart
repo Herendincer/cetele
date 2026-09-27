@@ -37,7 +37,10 @@ class AccountsData extends AsyncNotifier<List<AccountModel>> {
 }
 
 final accountsProvider =
-    AsyncNotifierProvider<AccountsData, List<AccountModel>>(AccountsData.new);
+    AsyncNotifierProvider<AccountsData, List<AccountModel>>(
+      AccountsData.new,
+      retry: manualDataRetry,
+    );
 
 class CashBankController extends AsyncNotifier<void> {
   @override

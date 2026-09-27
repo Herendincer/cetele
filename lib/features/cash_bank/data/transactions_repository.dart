@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/data_providers.dart';
+import '../../../core/services/supabase_request.dart';
 import '../presentation/models/cash_transaction_model.dart';
 
 class TransactionsRepository {
@@ -16,7 +17,8 @@ class TransactionsRepository {
         )
         .eq('user_id', userId)
         .order('transaction_date', ascending: false)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .withRequestTimeout();
     return rows.map(CashTransactionModel.fromJson).toList();
   }
 
@@ -40,7 +42,10 @@ class TransactionsRepository {
       'description': transaction.description,
     };
     if (isNew) {
-      await client.from('transactions').insert({...values, 'user_id': userId});
+      await client.from('transactions').insert({
+        ...values,
+        'user_id': userId,
+      }).withRequestTimeout();
     } else {
       await client
           .from('transactions')
@@ -48,7 +53,8 @@ class TransactionsRepository {
           .eq('user_id', userId)
           .eq('id', transaction.id)
           .select()
-          .single();
+          .single()
+          .withRequestTimeout();
     }
   }
 
@@ -59,7 +65,8 @@ class TransactionsRepository {
         .eq('user_id', userId)
         .eq('id', id)
         .select()
-        .single();
+        .single()
+        .withRequestTimeout();
   }
 }
 
@@ -81,4 +88,5 @@ class TransactionsData extends AsyncNotifier<List<CashTransactionModel>> {
 final transactionsProvider =
     AsyncNotifierProvider<TransactionsData, List<CashTransactionModel>>(
       TransactionsData.new,
+      retry: manualDataRetry,
     );
