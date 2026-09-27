@@ -8,6 +8,7 @@ import '../../../core/services/subscription_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/widgets/app_snackbar.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../auth/screens/existing_account_dialog.dart';
 import '../../subscription/presentation/paywall_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -28,7 +29,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _signInWithProvider(OAuthProvider provider) async {
     setState(() => _isProcessingAuth = true);
     try {
-      await SupabaseService.signInWithProvider(provider);
+      await SupabaseService.signInWithProvider(
+        provider,
+        confirmExistingAccount: () => confirmExistingAccount(context),
+      );
     } catch (e) {
       if (mounted) {
         AppSnackBar.showError(

@@ -40,7 +40,10 @@ class SupabaseService {
 
   /// Sağlayıcının native kimlik bilgileriyle giriş yapar veya misafiri yükseltir.
   /// Kullanıcının hesap seçimini iptal etmesi normal bir sonuçtur.
-  static Future<bool> signInWithProvider(OAuthProvider provider) async {
+  static Future<bool> signInWithProvider(
+    OAuthProvider provider, {
+    required Future<bool> Function() confirmExistingAccount,
+  }) async {
     if (provider != OAuthProvider.google ||
         kIsWeb ||
         defaultTargetPlatform != TargetPlatform.android) {
@@ -68,23 +71,46 @@ class SupabaseService {
       final authorization =
           await account.authorizationClient.authorizationForScopes(scopes) ??
           await account.authorizationClient.authorizeScopes(scopes);
-      if (isAnonymous) {
-        await client.auth.linkIdentityWithIdToken(
-          provider: provider,
-          idToken: idToken,
-          accessToken: authorization.accessToken,
-        );
-      } else {
-        await client.auth.signInWithIdToken(
-          provider: provider,
-          idToken: idToken,
-          accessToken: authorization.accessToken,
-        );
-      }
-      return true;
+      return await completeProviderSignIn(
+        provider: provider,
+        idToken: idToken,
+        accessToken: authorization.accessToken,
+        confirmExistingAccount: confirmExistingAccount,
+      );
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return false;
       rethrow;
     }
+  }
+
+  /// Native sağlayıcı token'larını mevcut oturumu koruyarak Supabase'e aktarır.
+  static Future<bool> completeProviderSignIn({
+    required OAuthProvider provider,
+    required String idToken,
+    required String accessToken,
+    required Future<bool> Function() confirmExistingAccount,
+  }) async {
+    final originalUserId = currentUser?.id;
+    if (isAnonymous) {
+      try {
+        await client.auth.linkIdentityWithIdToken(
+          provider: provider,
+          idToken: idToken,
+          accessToken: accessToken,
+        );
+        return true;
+      } on AuthException catch (error) {
+        if (error.code != 'identity_already_exists') rethrow;
+        if (!await confirmExistingAccount()) return false;
+        // Diyalog açıkken oturum değişmişse eski onayı yeni oturuma uygulama.
+        if (currentUser?.id != originalUserId || !isAnonymous) return false;
+      }
+    }
+    await client.auth.signInWithIdToken(
+      provider: provider,
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+    return true;
   }
 }

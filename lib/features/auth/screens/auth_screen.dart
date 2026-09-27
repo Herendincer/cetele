@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_snackbar.dart';
+import 'existing_account_dialog.dart';
 
 /// Google ile Devam Et / Giriş Yapmadan Devam Et seçeneklerini sunan giriş ekranı.
 class AuthScreen extends StatefulWidget {
@@ -19,7 +20,10 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _continueWithProvider(OAuthProvider provider) async {
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.signInWithProvider(provider);
+      await SupabaseService.signInWithProvider(
+        provider,
+        confirmExistingAccount: () => confirmExistingAccount(context),
+      );
     } catch (e) {
       if (mounted) {
         AppSnackBar.showError(
