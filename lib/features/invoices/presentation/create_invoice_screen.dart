@@ -16,16 +16,6 @@ import 'models/invoice_type.dart';
 import 'widgets/invoice_line_item_row.dart';
 import 'widgets/invoice_summary_card.dart';
 
-/// Demo amaçlı cari listesi (Supabase entegrasyonu tamamlanana kadar).
-// ignore: unused_element
-const List<String> _mockContactNames = [
-  'Aslan Tekstil Ltd. Şti.',
-  'Yıldız Elektronik',
-  'Deniz Lojistik A.Ş.',
-  'Mert Ofis Malzemeleri',
-  'Nur Reklam ve Matbaa',
-];
-
 /// Yeni satış/alış faturası oluşturma formu.
 class CreateInvoiceScreen extends ConsumerStatefulWidget {
   const CreateInvoiceScreen({super.key, this.initialType = InvoiceType.sales});

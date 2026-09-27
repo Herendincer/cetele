@@ -13,51 +13,6 @@ import 'contact_detail_screen.dart';
 import 'create_contact_screen.dart';
 import 'models/contact_model.dart';
 
-// Eski örnekler, kullanıcı testinden sonra kaldırılacak.
-// ignore: unused_element
-final List<ContactModel> _mockContacts = [
-  const ContactModel(
-    id: 'c1',
-    type: ContactType.customer,
-    name: 'Aslan Tekstil Ltd. Şti.',
-    taxNumber: '1234567890',
-    phone: '0212 555 10 20',
-    balance: 24500,
-  ),
-  const ContactModel(
-    id: 'c2',
-    type: ContactType.customer,
-    name: 'Yıldız Elektronik',
-    taxNumber: '2345678901',
-    phone: '0212 555 30 40',
-    balance: 7250,
-  ),
-  const ContactModel(
-    id: 'c3',
-    type: ContactType.customer,
-    name: 'Nur Reklam ve Matbaa',
-    taxNumber: '3456789012',
-    phone: '0212 555 50 60',
-    balance: 0,
-  ),
-  const ContactModel(
-    id: 'c4',
-    type: ContactType.supplier,
-    name: 'Deniz Lojistik A.Ş.',
-    taxNumber: '4567890123',
-    phone: '0216 555 70 80',
-    balance: -9840,
-  ),
-  const ContactModel(
-    id: 'c5',
-    type: ContactType.supplier,
-    name: 'Mert Ofis Malzemeleri',
-    taxNumber: '5678901234',
-    phone: '0216 555 90 10',
-    balance: -2140,
-  ),
-];
-
 /// Müşteri ve tedarikçi cari kartlarını bakiyeleriyle listeleyen ekran.
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});

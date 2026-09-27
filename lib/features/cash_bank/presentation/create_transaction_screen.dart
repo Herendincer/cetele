@@ -16,16 +16,6 @@ import '../../../core/widgets/confirm_dialog.dart';
 import 'models/account_model.dart';
 import 'models/cash_transaction_model.dart';
 
-/// Demo amaçlı cari listesi (Supabase entegrasyonu tamamlanana kadar).
-// ignore: unused_element
-const List<String> _mockContactNames = [
-  'Aslan Tekstil Ltd. Şti.',
-  'Yıldız Elektronik',
-  'Deniz Lojistik A.Ş.',
-  'Mert Ofis Malzemeleri',
-  'Nur Reklam ve Matbaa',
-];
-
 /// Müşteriden tahsilat alma veya tedarikçiye/masrafa ödeme yapma formu.
 class CreateTransactionScreen extends ConsumerStatefulWidget {
   const CreateTransactionScreen({
