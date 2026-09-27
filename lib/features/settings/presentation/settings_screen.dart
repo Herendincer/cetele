@@ -97,7 +97,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeControllerProvider);
     final subscriptionStatus = ref.watch(subscriptionStatusProvider);
-    final isPro = subscriptionStatus.value ?? false;
+    final isPro = ref.watch(isProProvider);
     // Auth durumu değiştiğinde (misafir → Google) hesap kartının güncellenmesini sağlar.
     ref.watch(authStateProvider);
     final bool isAnonymous = SupabaseService.isAnonymous;

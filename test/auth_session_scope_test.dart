@@ -79,7 +79,8 @@ void main() {
         localStorage: EmptyLocalStorage(),
       ),
     );
-    await SubscriptionService.initialize();
+    await setSession('bootstrap');
+    await SubscriptionService.initialize(apiKey: 'test-unit-sdk-key');
   });
 
   tearDown(() async {
@@ -88,6 +89,31 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test(
+    'guests never identify, query, purchase or restore with RevenueCat',
+    () async {
+      await setSession('guest', anonymous: true);
+      calls.clear();
+      await SubscriptionService.identifyCustomer('guest');
+      expect(await SubscriptionService.checkSubscriptionStatus(), isFalse);
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      expect(
+        await container.read(subscriptionStatusProvider.future),
+        SubscriptionStatus.signInRequired,
+      );
+      await expectLater(
+        SubscriptionService.purchaseMonthlySubscription(),
+        throwsStateError,
+      );
+      await expectLater(
+        SubscriptionService.restorePurchases(),
+        throwsStateError,
+      );
+      expect(calls, isEmpty);
+    },
+  );
 
   testWidgets('account changes and same-id upgrades discard the entire cache', (
     tester,

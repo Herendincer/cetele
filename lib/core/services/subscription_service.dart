@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
@@ -11,16 +12,26 @@ class SubscriptionService {
   static bool _initialized = false;
   static String? _identifiedUserId;
 
+  static bool get isEligible {
+    final user = SupabaseService.currentUser;
+    return user != null && !user.isAnonymous;
+  }
+
+  static bool get isReady =>
+      isEligible &&
+      _initialized &&
+      _identifiedUserId == SupabaseService.currentUser?.id;
+
   /// main() içinde, Supabase başlatıldıktan sonra çağrılmalıdır.
   /// RevenueCat yapılandırılamasa bile (ör. geçersiz API anahtarı) uygulama
   /// akışını bozmamalı, bu yüzden hataları yutar.
-  static Future<void> initialize() async {
+  static Future<void> initialize({String? apiKey}) async {
     if (_initialized) return;
+    final key = apiKey ?? AppConstants.revenueCatGoogleApiKey;
+    if (!isEligible || key.isEmpty) return;
     try {
       await Purchases.setLogLevel(LogLevel.warn);
-      final configuration = PurchasesConfiguration(
-        AppConstants.revenueCatGoogleApiKey,
-      );
+      final configuration = PurchasesConfiguration(key);
       final userId = SupabaseService.currentUser?.id;
       if (userId != null) {
         configuration.appUserID = userId;
@@ -36,11 +47,14 @@ class SubscriptionService {
   /// Giriş yapan kullanıcıyı Supabase user id'si ile RevenueCat müşterisi olarak tanımlar.
   static Future<void> identifyCustomer(String supabaseUserId) async {
     _identifiedUserId = null;
+    if (!isEligible || SupabaseService.currentUser?.id != supabaseUserId) {
+      return;
+    }
     try {
       if (!_initialized) await initialize();
       if (!_initialized) return;
       await Purchases.logIn(supabaseUserId);
-      if (SupabaseService.currentUser?.id == supabaseUserId) {
+      if (isEligible && SupabaseService.currentUser?.id == supabaseUserId) {
         _identifiedUserId = supabaseUserId;
       }
     } catch (_) {
@@ -62,12 +76,13 @@ class SubscriptionService {
   /// RevenueCat henüz yapılandırılmamışsa (ör. init hatası) false döner.
   static Future<bool> checkSubscriptionStatus() async {
     final userId = SupabaseService.currentUser?.id;
-    if (!_initialized || userId == null || userId != _identifiedUserId) {
+    if (!isReady || userId == null) {
       return false;
     }
     try {
       final customerInfo = await Purchases.getCustomerInfo();
-      if (SupabaseService.currentUser?.id != userId ||
+      if (!isEligible ||
+          SupabaseService.currentUser?.id != userId ||
           _identifiedUserId != userId) {
         return false;
       }
@@ -81,13 +96,13 @@ class SubscriptionService {
 
   /// Mevcut aylık abonelik paketini (varsa) döner.
   static Future<Package?> getMonthlyPackage() async {
+    _requireIdentifiedCustomer();
     final offerings = await Purchases.getOfferings();
-    final current = offerings.current;
+    final current = offerings.getOffering(AppConstants.offeringId);
     if (current == null) return null;
-    return current.monthly ??
-        current.availablePackages
-            .where((package) => package.packageType == PackageType.monthly)
-            .firstOrNull;
+    return current.availablePackages
+        .where((package) => package.identifier == AppConstants.monthlyPackageId)
+        .firstOrNull;
   }
 
   /// Aylık abonelik paketini satın alır ve "pro" entitlement'ının aktif olup
@@ -120,7 +135,7 @@ class SubscriptionService {
 
   static String _requireIdentifiedCustomer() {
     final userId = SupabaseService.currentUser?.id;
-    if (!_initialized || userId == null || userId != _identifiedUserId) {
+    if (!isReady || userId == null) {
       throw StateError(
         'Abonelik hesabı doğrulanamadı. Lütfen tekrar giriş yapın.',
       );
@@ -129,33 +144,82 @@ class SubscriptionService {
   }
 }
 
-/// Uygulama genelinde abonelik durumunu (Ücretsiz/Pro) tutan Riverpod controller.
+enum SubscriptionStatus { signInRequired, free, pro, unavailable }
+
+final isProProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(subscriptionStatusProvider).value == SubscriptionStatus.pro,
+);
+
+/// Hesaba bağlı haklar; misafirler için RevenueCat sorgusu yapılmaz.
 final subscriptionStatusProvider =
-    AsyncNotifierProvider<SubscriptionStatusController, bool>(
+    AsyncNotifierProvider<SubscriptionStatusController, SubscriptionStatus>(
       SubscriptionStatusController.new,
     );
 
-class SubscriptionStatusController extends AsyncNotifier<bool> {
+class SubscriptionStatusController extends AsyncNotifier<SubscriptionStatus> {
+  int _revision = 0;
+
   @override
-  Future<bool> build() => SubscriptionService.checkSubscriptionStatus();
+  Future<SubscriptionStatus> build() async {
+    if (!SubscriptionService.isEligible) {
+      return SubscriptionStatus.signInRequired;
+    }
+    final userId = SupabaseService.currentUser?.id;
+    final lifecycle = AppLifecycleListener(onResume: () => refresh());
+    void onInfo(CustomerInfo info) {
+      if (!ref.mounted ||
+          !SubscriptionService.isReady ||
+          userId != SupabaseService.currentUser?.id) {
+        return;
+      }
+      _revision++;
+      state = AsyncData(
+        info.entitlements.active.containsKey(AppConstants.proEntitlementId)
+            ? SubscriptionStatus.pro
+            : SubscriptionStatus.free,
+      );
+    }
+
+    Purchases.addCustomerInfoUpdateListener(onInfo);
+    ref.onDispose(() {
+      lifecycle.dispose();
+      Purchases.removeCustomerInfoUpdateListener(onInfo);
+    });
+    return _load();
+  }
+
+  Future<SubscriptionStatus> _load() async {
+    if (!SubscriptionService.isEligible) {
+      return SubscriptionStatus.signInRequired;
+    }
+    if (!SubscriptionService.isReady) return SubscriptionStatus.unavailable;
+    return await SubscriptionService.checkSubscriptionStatus()
+        ? SubscriptionStatus.pro
+        : SubscriptionStatus.free;
+  }
 
   Future<void> refresh() async {
+    final revision = ++_revision;
     state = const AsyncLoading();
-    final result = await AsyncValue.guard(
-      SubscriptionService.checkSubscriptionStatus,
-    );
-    if (ref.mounted) state = result;
+    final result = await AsyncValue.guard(() async {
+      if (SubscriptionService.isReady) {
+        await Purchases.invalidateCustomerInfoCache();
+      }
+      return _load();
+    });
+    if (ref.mounted && revision == _revision) state = result;
   }
 
   Future<bool> purchaseMonthly() async {
     final isPro = await SubscriptionService.purchaseMonthlySubscription();
-    if (ref.mounted) state = AsyncData(isPro);
+    if (ref.mounted) await refresh();
     return isPro;
   }
 
   Future<bool> restore() async {
     final isPro = await SubscriptionService.restorePurchases();
-    if (ref.mounted) state = AsyncData(isPro);
+    if (ref.mounted) await refresh();
     return isPro;
   }
 }

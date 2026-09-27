@@ -28,12 +28,17 @@ class AppConstants {
   // Bu değeri kendi RevenueCat projenizin Android public SDK key'i ile değiştirin.
   static const String revenueCatGoogleApiKey = String.fromEnvironment(
     'REVENUECAT_GOOGLE_API_KEY',
-    defaultValue: 'test_yuurGNGXdDVHxpVdpmmRfCHNElm',
   );
 
   // RevenueCat entitlement/product tanımlayıcıları.
   static const String proEntitlementId = 'pro';
   static const String monthlyPackageId = r'$rc_monthly';
+  static const String offeringId = 'default';
+  static const String monthlyProductId = 'cetele_pro_monthly';
+  static const String monthlyBasePlanId = 'monthly';
+  static const int freeMonthlySalesInvoiceLimit = 5;
+  static const String manageSubscriptionsUrl =
+      'https://play.google.com/store/account/subscriptions';
 
   // Yasal bağlantılar - paywall ekranında gösterilir.
   // Gerçek gizlilik politikası ve kullanım koşulları URL'leriniz ile değiştirin.

@@ -56,7 +56,7 @@ class _AuthSessionScopeState extends State<AuthSessionScope> {
     });
     // Çıkış ve hızlı yeniden giriş SDK'da ters sırayla tamamlanmasın.
     _pendingTransition = _pendingTransition.then((_) async {
-      if (user == null) {
+      if (user == null || user.isAnonymous) {
         await SubscriptionService.resetCustomer();
       } else {
         await SubscriptionService.identifyCustomer(user.id);
