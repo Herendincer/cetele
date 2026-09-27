@@ -9,6 +9,7 @@ class SubscriptionService {
   SubscriptionService._();
 
   static bool _initialized = false;
+  static String? _identifiedUserId;
 
   /// main() içinde, Supabase başlatıldıktan sonra çağrılmalıdır.
   /// RevenueCat yapılandırılamasa bile (ör. geçersiz API anahtarı) uygulama
@@ -26,6 +27,7 @@ class SubscriptionService {
       }
       await Purchases.configure(configuration);
       _initialized = true;
+      _identifiedUserId = userId;
     } catch (_) {
       // Yapılandırma başarısız olursa isPro=false ile devam edilir.
     }
@@ -33,15 +35,24 @@ class SubscriptionService {
 
   /// Giriş yapan kullanıcıyı Supabase user id'si ile RevenueCat müşterisi olarak tanımlar.
   static Future<void> identifyCustomer(String supabaseUserId) async {
+    _identifiedUserId = null;
     try {
+      if (!_initialized) await initialize();
+      if (!_initialized) return;
       await Purchases.logIn(supabaseUserId);
+      if (SupabaseService.currentUser?.id == supabaseUserId) {
+        _identifiedUserId = supabaseUserId;
+      }
     } catch (_) {
+      _identifiedUserId = null;
       // Kimliklendirme başarısız olsa da uygulama akışı bozulmamalı.
     }
   }
 
   /// Kullanıcı çıkış yaptığında RevenueCat kimliğini de sıfırlar.
   static Future<void> resetCustomer() async {
+    _identifiedUserId = null;
+    if (!_initialized) return;
     try {
       await Purchases.logOut();
     } catch (_) {}
@@ -50,9 +61,16 @@ class SubscriptionService {
   /// "pro" entitlement'ının aktif olup olmadığını kontrol eder.
   /// RevenueCat henüz yapılandırılmamışsa (ör. init hatası) false döner.
   static Future<bool> checkSubscriptionStatus() async {
-    if (!_initialized) return false;
+    final userId = SupabaseService.currentUser?.id;
+    if (!_initialized || userId == null || userId != _identifiedUserId) {
+      return false;
+    }
     try {
       final customerInfo = await Purchases.getCustomerInfo();
+      if (SupabaseService.currentUser?.id != userId ||
+          _identifiedUserId != userId) {
+        return false;
+      }
       return customerInfo.entitlements.active.containsKey(
         AppConstants.proEntitlementId,
       );
@@ -75,11 +93,16 @@ class SubscriptionService {
   /// Aylık abonelik paketini satın alır ve "pro" entitlement'ının aktif olup
   /// olmadığını döner.
   static Future<bool> purchaseMonthlySubscription() async {
+    final userId = _requireIdentifiedCustomer();
     final package = await getMonthlyPackage();
     if (package == null) {
       throw Exception('Kullanılabilir bir abonelik paketi bulunamadı');
     }
+    if (_requireIdentifiedCustomer() != userId) {
+      throw StateError('Hesap değişti. Lütfen tekrar deneyin.');
+    }
     final result = await Purchases.purchase(PurchaseParams.package(package));
+    if (_requireIdentifiedCustomer() != userId) return false;
     return result.customerInfo.entitlements.active.containsKey(
       AppConstants.proEntitlementId,
     );
@@ -87,18 +110,30 @@ class SubscriptionService {
 
   /// Önceki satın alımları geri yükler ve "pro" durumunu döner.
   static Future<bool> restorePurchases() async {
+    final userId = _requireIdentifiedCustomer();
     final customerInfo = await Purchases.restorePurchases();
+    if (_requireIdentifiedCustomer() != userId) return false;
     return customerInfo.entitlements.active.containsKey(
       AppConstants.proEntitlementId,
     );
+  }
+
+  static String _requireIdentifiedCustomer() {
+    final userId = SupabaseService.currentUser?.id;
+    if (!_initialized || userId == null || userId != _identifiedUserId) {
+      throw StateError(
+        'Abonelik hesabı doğrulanamadı. Lütfen tekrar giriş yapın.',
+      );
+    }
+    return userId;
   }
 }
 
 /// Uygulama genelinde abonelik durumunu (Ücretsiz/Pro) tutan Riverpod controller.
 final subscriptionStatusProvider =
     AsyncNotifierProvider<SubscriptionStatusController, bool>(
-  SubscriptionStatusController.new,
-);
+      SubscriptionStatusController.new,
+    );
 
 class SubscriptionStatusController extends AsyncNotifier<bool> {
   @override
@@ -106,18 +141,21 @@ class SubscriptionStatusController extends AsyncNotifier<bool> {
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(SubscriptionService.checkSubscriptionStatus);
+    final result = await AsyncValue.guard(
+      SubscriptionService.checkSubscriptionStatus,
+    );
+    if (ref.mounted) state = result;
   }
 
   Future<bool> purchaseMonthly() async {
     final isPro = await SubscriptionService.purchaseMonthlySubscription();
-    state = AsyncData(isPro);
+    if (ref.mounted) state = AsyncData(isPro);
     return isPro;
   }
 
   Future<bool> restore() async {
     final isPro = await SubscriptionService.restorePurchases();
-    state = AsyncData(isPro);
+    if (ref.mounted) state = AsyncData(isPro);
     return isPro;
   }
 }

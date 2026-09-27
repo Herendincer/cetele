@@ -123,9 +123,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             Icons.cloud_off_outlined,
                             color: AppTheme.primaryColor,
                           ),
-                    title: const Text('Google ile Giriş Yap / Hesabını Bağla'),
+                    title: const Text(
+                      'Google ile Giriş Yap',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: const Text(
-                      'Verilerinizi ve aboneliğinizi buluta yedeklemek için Google ile Giriş Yapın',
+                      'Misafir hesabınızı bağlayarak verilerinize başka cihazlardan da erişin.',
                     ),
                     onTap: _isProcessingAuth
                         ? null

@@ -21,12 +21,6 @@ Future<void> main() async {
   } catch (_) {
     // RevenueCat başlatılamasa bile Supabase oturumu ve uygulama akışı devam etmeli.
   }
-  SupabaseService.authStateChanges.listen((authState) {
-    final userId = authState.session?.user.id;
-    if (userId != null) {
-      SubscriptionService.identifyCustomer(userId);
-    }
-  });
   runApp(const AuthSessionScope(child: MyApp()));
 }
 
@@ -36,6 +30,8 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeControllerProvider);
+    // Yeni oturum kapsamı açılır açılmaz doğru müşterinin haklarını yeniden oku.
+    ref.watch(subscriptionStatusProvider);
     ref.watch(authStateProvider);
     final user = SupabaseService.currentUser;
     return MaterialApp(
