@@ -8,13 +8,13 @@ import 'core/services/supabase_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/widgets/app_shell.dart';
+import 'features/auth/providers/auth_providers.dart';
+import 'features/auth/screens/auth_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('tr_TR', null);
   await SupabaseService.initialize();
-  // Oturum yoksa misafir (anonim) oturum aç: user.id her zaman mevcut olsun.
-  await SupabaseService.ensureSession();
   try {
     await SubscriptionService.initialize();
   } catch (_) {
@@ -35,14 +35,17 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeControllerProvider);
+    ref.watch(authStateProvider);
+    final user = SupabaseService.currentUser;
     return MaterialApp(
+      // Hesap değiştiğinde açık detay/form rotalarını ve ekran durumunu da sil.
+      key: ValueKey(user?.id),
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode.themeMode,
-      home: const AppShell(),
+      home: user == null ? const AuthScreen() : const AppShell(),
     );
   }
 }
-

@@ -32,15 +32,10 @@ class SupabaseService {
   static Stream<AuthState> get authStateChanges =>
       client.auth.onAuthStateChange;
 
-  /// Geçerli bir oturum yoksa misafir (anonim) oturum açar, böylece
-  /// `user.id` uygulama genelinde her zaman mevcut olur.
+  /// Yalnızca kullanıcı misafir olarak devam etmeyi seçtiğinde çağrılır.
   static Future<void> ensureSession() async {
     if (currentUser != null) return;
-    try {
-      await client.auth.signInAnonymously();
-    } catch (_) {
-      // Ağ/servis hatası olsa bile uygulama akışı bozulmamalı.
-    }
+    await client.auth.signInAnonymously();
   }
 
   /// Sağlayıcının native kimlik bilgileriyle giriş yapar veya misafiri yükseltir.

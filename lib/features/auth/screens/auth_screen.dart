@@ -19,8 +19,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _continueWithProvider(OAuthProvider provider) async {
     setState(() => _isLoading = true);
     try {
-      final signedIn = await SupabaseService.signInWithProvider(provider);
-      if (signedIn && mounted) Navigator.of(context).pop();
+      await SupabaseService.signInWithProvider(provider);
     } catch (e) {
       if (mounted) {
         AppSnackBar.showError(
@@ -37,7 +36,13 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = true);
     try {
       await SupabaseService.ensureSession();
-      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.showError(
+          context,
+          'Misafir oturumu açılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -48,7 +53,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -66,8 +71,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Verilerinizi ve aboneliğinizi buluta yedeklemek için Google ile '
-                  'devam edin, ya da giriş yapmadan kullanmaya devam edin.',
+                  'Verilerinize başka cihazlardan da erişmek için Google ile '
+                  'giriş yapın veya hesap oluşturmadan devam edin.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppTheme.textSecondaryColor),
                 ),
@@ -79,15 +84,23 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? null
                         : () => _continueWithProvider(OAuthProvider.google),
                     icon: const Icon(Icons.login),
-                    label: const Text('Google ile Devam Et'),
+                    label: const Text(
+                      'Google ile Giriş Yap',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton(
+                  child: TextButton(
                     onPressed: _isLoading ? null : _continueAsGuest,
-                    child: const Text('Giriş Yapmadan Devam Et'),
+                    child: const Text(
+                      'Hesap oluşturmadan devam et',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 if (_isLoading) ...[
