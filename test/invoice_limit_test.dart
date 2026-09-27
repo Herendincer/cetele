@@ -12,6 +12,7 @@ import 'package:cetele/features/invoices/presentation/create_invoice_screen.dart
 import 'package:cetele/features/invoices/presentation/invoices_screen.dart';
 import 'package:cetele/features/invoices/presentation/models/invoice_model.dart';
 import 'package:cetele/features/invoices/presentation/models/invoice_type.dart';
+import 'package:cetele/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -243,4 +244,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bu ay ücretsiz fatura hakkınız doldu'), findsOneWidget);
   });
+
+  testWidgets(
+    'settings shows server usage and refreshes after returning to app',
+    (tester) async {
+      repository.usage = 4;
+      await tester.pumpWidget(app(const SettingsScreen()));
+      await tester.pumpAndSettle();
+      expect(find.text('Bu ay satış faturası: 4 / 5'), findsOneWidget);
+      repository.usage = 5;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Bu ay satış faturası: 5 / 5'), findsOneWidget);
+    },
+  );
+
+  testWidgets('settings count failure can be retried', (tester) async {
+    repository.failCount = true;
+    await tester.pumpWidget(app(const SettingsScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Fatura kullanımı alınamadı.'), findsOneWidget);
+    repository.failCount = false;
+    repository.usage = 2;
+    await tester.tap(find.byTooltip('Fatura kullanımını yenile'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bu ay satış faturası: 2 / 5'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Pro settings hides quota and exposes subscription management at 320px',
+    (tester) async {
+      plan = SubscriptionStatus.pro;
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(app(const SettingsScreen()));
+      await tester.pumpAndSettle();
+      expect(find.text('Pro'), findsOneWidget);
+      expect(find.text('Aboneliği Yönet'), findsOneWidget);
+      expect(find.textContaining('Bu ay satış faturası:'), findsNothing);
+      expect(repository.countCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

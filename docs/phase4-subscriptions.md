@@ -108,5 +108,57 @@ da herhangi bir satın alma başlatmadı.
 - [ ] 320 dp genişlikte ve büyük yazıyla Google giriş açıklamasını, paywall'ı ve
   Ayarlar'ı kontrol et; düğmeler erişilebilir ve metinler taşmasız olsun.
 
-Fatura limiti ve aylık kullanım kontrolleri, sayım adımının tamamlanmasıyla bu
-rehbere eklenecektir.
+## Fatura sayımı kurulumu ve davranışı
+
+Önce `supabase/migrations/20260927120000_monthly_sales_invoice_count.sql`
+dosyasını Supabase SQL Editor'da **siz çalıştırın**. Önceki migration'ların
+uygulanmış olması gerekir. Bu çalışma SQL'i hiçbir veritabanında uygulamadı.
+Yeni fonksiyon açılmadan ücretsiz satış oluşturma kontrolü hata gösterir;
+eksik RPC veya bağlantı hatası sıfır kullanım olarak değerlendirilmez.
+
+`count_monthly_sales_invoices()` parametresizdir ve bir sayı döndürür.
+`SECURITY DEFINER`, boş `search_path`, sabit şema adları ve içeride `auth.uid()`
+kontrolü kullanır. Oturumsuz çağrıya izin verilmez. Oturumlu misafirler de
+Supabase'in authenticated rolü üzerinden yalnızca kendi kullanımını görür.
+Satışlara ait `(user_id, issue_date)` kısmi indeksi sayımı destekler.
+
+Son onaylanan sayım kuralı: faturanın **issue_date** alanı, sunucu saatine göre
+**Europe/Istanbul** takviminde geçerli ayın ilk günü dahil, sonraki ayın ilk günü
+hariç aralığında olmalıdır. `created_at` kullanılmaz. Alışlar sayılmaz; taslak,
+onaylı, ödenmiş ve iptal edilmiş satışlar sayılır. Silinen veya tarihi başka aya
+taşınan faturalar mevcut ayın sayımından çıkar; kalıcı kullanım günlüğü eklenmedi.
+
+Ücretsiz kullanıcının sayısı 5 veya üzerindeyse satış oluşturma formu yerine
+paywall açılır. Kayıtta tekrar sayılır; alış formunu açıp satışa geçmek de kontrol
+edilir. Pro ve alış faturaları kotadan etkilenmez. Mevcut fatura işlemleri ve PDF
+dışa aktarma sınır kontrolünden geçmez. Sayım fatura değişikliklerinde yenilenir;
+Ayarlar'da elle, uygulamaya dönüşte ve açık ekranda ay değişince de yenilenebilir.
+
+Sınır: bu faz sunucu sayımıyla uygulama akışını denetler; sayım ve oluşturma ayrı
+isteklerdir. İki cihazın tam aynı anda kayıt yapması veya API'yi doğrudan çağırmak
+için atomik veritabanı kota kilidi değildir. Böyle bir sunucu engeli, sunucuda
+doğrulanan Pro hakkını da gerektirir; burada istemcinin gönderdiği bir Pro
+bayrağına güvenen SQL eklenmedi.
+
+- [ ] Migration'ı elle uygula; ücretsiz hesapta Ayarlar'da **0 / 5** kullanımını gör.
+- [ ] Bu ay tarihli 5 satış faturası oluştur; her kayıttan sonra sayının arttığını gör.
+- [ ] Altıncı satış için hem Faturalar düğmesini hem dashboard hızlı işlemini dene;
+  **Bu ay ücretsiz fatura hakkınız doldu** paywall'ı açılsın, form açılmasın.
+- [ ] Aynı ayda alış faturası oluştur; satış kullanımının değişmediğini gör.
+  Alış formunda satış türünü seçince kota kontrolü yapılsın.
+- [ ] Dört kullanımdayken satış formunu aç; başka cihazda beşinciyi oluştur.
+  İlk cihazda Kaydet'e bas; yeniden sayım paywall'ı açsın ve kayıt yapılmasın.
+- [ ] Farklı kullanıcıyla giriş yap; diğer kullanıcının sayısı görünmesin.
+  Misafir beşe ulaştığında paywall Google girişi istesin.
+- [ ] Önceki ay tarihli satışın bu ay sayılmadığını kontrol et; yalnızca kayıt
+  oluşturma zamanı bu ay olması sayılması için yeterli değildir.
+- [ ] Mevcut ay satışını sil; yenileme sonrası kullanımın azaldığını gör.
+  Düzenleme tarihi değişikliği varsa başka aya taşımak da aynı etkiyi vermeli.
+- [ ] Beş kullanımdayken mevcut faturaları aç, durumunu değiştir, PDF çıkar;
+  bu işlemler engellenmesin. Cari, hesap ve hareket eklemek de sınırsız kalsın.
+- [ ] Sayım sırasında ağ bağlantısını kes; hata gösterilsin, satış kaydı
+  yapılmasın. Bağlantı gelince Ayarlar yenileme düğmesiyle tekrar dene.
+- [ ] Ayrı test ortamında ay sınırlarını kontrol et: Türkiye saatine göre ayın
+  ilk günündeki faturalar dahil, sonraki ayın ilk günündekiler hariç olmalı.
+- [ ] Mevcut Pro test hesabıyla beş sınırının uygulanmadığını, Ayarlar'da kota
+  yerine Pro planı ve yönetim bağlantısı gösterildiğini kontrol et.

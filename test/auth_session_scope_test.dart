@@ -19,10 +19,25 @@ void main() {
   late List<String> calls;
   Completer<void>? pendingLogin;
   bool failLogin = false;
+  bool activePro = false;
   String customerId = '';
 
   Map<String, dynamic> customerInfo() => {
-    'entitlements': {'all': {}, 'active': {}},
+    'entitlements': {
+      'all': {},
+      'active': {
+        if (activePro)
+          'pro': {
+            'identifier': 'pro',
+            'isActive': true,
+            'willRenew': true,
+            'latestPurchaseDate': '2026-01-01T00:00:00Z',
+            'originalPurchaseDate': '2026-01-01T00:00:00Z',
+            'productIdentifier': 'test-product',
+            'isSandbox': true,
+          },
+      },
+    },
     'allPurchaseDates': {},
     'activeSubscriptions': [],
     'allPurchasedProductIdentifiers': [],
@@ -55,6 +70,7 @@ void main() {
     calls = [];
     pendingLogin = null;
     failLogin = false;
+    activePro = false;
     SubscriptionIntent.pending = false;
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -241,4 +257,47 @@ void main() {
       expect(calls, isNot(contains('getCustomerInfo')));
     },
   );
+
+  testWidgets('customer info events and app resume refresh derived Pro state', (
+    tester,
+  ) async {
+    await setSession('account');
+    await SubscriptionService.identifyCustomer('account');
+    await tester.pumpWidget(
+      ProviderScope(
+        child: Consumer(
+          builder: (context, ref, _) {
+            return MaterialApp(
+              home: Text(ref.watch(isProProvider) ? 'Pro' : 'Ücretsiz'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ücretsiz'), findsOneWidget);
+    activePro = true;
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'purchases_flutter',
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('Purchases-CustomerInfoUpdated', customerInfo()),
+      ),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pro'), findsOneWidget);
+    activePro = false;
+    calls.clear();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Ücretsiz'), findsOneWidget);
+    expect(calls, contains('invalidateCustomerInfoCache'));
+    expect(calls, contains('getCustomerInfo'));
+    expect(calls, isNot(contains('purchasePackage')));
+  });
 }

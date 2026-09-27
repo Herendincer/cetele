@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +13,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/app_snackbar.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/screens/existing_account_dialog.dart';
+import '../../invoices/presentation/controllers/invoice_usage_provider.dart';
 import '../../subscription/presentation/paywall_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -22,6 +25,38 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isProcessingAuth = false;
+  late final AppLifecycleListener _lifecycle;
+  late final Timer _monthTimer;
+  late int _displayMonth;
+
+  // Bu saat yalnızca yenilemeyi tetikler; sayılacak ayı RPC sunucuda belirler.
+  int get _monthKey {
+    final now = DateTime.now().toUtc().add(const Duration(hours: 3));
+    return now.year * 12 + now.month;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _displayMonth = _monthKey;
+    _lifecycle = AppLifecycleListener(onResume: _refreshUsage);
+    _monthTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (_monthKey != _displayMonth) _refreshUsage();
+    });
+  }
+
+  void _refreshUsage() {
+    if (!mounted) return;
+    _displayMonth = _monthKey;
+    ref.invalidate(monthlySalesInvoiceCountProvider);
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    _monthTimer.cancel();
+    super.dispose();
+  }
 
   Future<void> _openPaywall(BuildContext context) async {
     await Navigator.of(context)
@@ -114,6 +149,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final themeMode = ref.watch(themeControllerProvider);
     final subscriptionStatus = ref.watch(subscriptionStatusProvider);
     final isPro = ref.watch(isProProvider);
+    final usage = isPro || subscriptionStatus.isLoading
+        ? null
+        : ref.watch(monthlySalesInvoiceCountProvider);
     // Auth durumu değiştiğinde (misafir → Google) hesap kartının güncellenmesini sağlar.
     ref.watch(authStateProvider);
     final bool isAnonymous = SupabaseService.isAnonymous;
@@ -190,6 +228,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _openPaywall(context),
                 ),
+                if (usage != null)
+                  ListTile(
+                    dense: true,
+                    title: usage.when(
+                      skipLoadingOnRefresh: false,
+                      data: (count) => Text(
+                        'Bu ay satış faturası: $count / ${AppConstants.freeMonthlySalesInvoiceLimit}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      loading: () => const Text(
+                        'Fatura kullanımı yükleniyor...',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      error: (_, _) => const Text(
+                        'Fatura kullanımı alınamadı.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Fatura kullanımını yenile',
+                      onPressed: _refreshUsage,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ),
                 if (subscriptionStatus.hasError ||
                     subscriptionStatus.value == SubscriptionStatus.unavailable)
                   Padding(
