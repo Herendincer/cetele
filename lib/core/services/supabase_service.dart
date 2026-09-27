@@ -38,6 +38,21 @@ class SupabaseService {
     await client.auth.signInAnonymously();
   }
 
+  static Future<void> signOut() async {
+    try {
+      // Diğer cihazların oturumlarını kapatmadan bu cihazdaki oturumu temizle.
+      await client.auth.signOut(scope: SignOutScope.local);
+    } finally {
+      if (_providerInitialization != null) {
+        try {
+          await GoogleSignIn.instance.signOut();
+        } catch (_) {
+          // Sağlayıcı SDK hatası Supabase oturumunun kapanmasını engellemesin.
+        }
+      }
+    }
+  }
+
   /// Sağlayıcının native kimlik bilgileriyle giriş yapar veya misafiri yükseltir.
   /// Kullanıcının hesap seçimini iptal etmesi normal bir sonuçtur.
   static Future<bool> signInWithProvider(

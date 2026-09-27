@@ -10,6 +10,7 @@ import 'core/theme/theme_controller.dart';
 import 'core/widgets/app_shell.dart';
 import 'features/auth/providers/auth_providers.dart';
 import 'features/auth/screens/auth_screen.dart';
+import 'features/auth/screens/auth_session_scope.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +27,7 @@ Future<void> main() async {
       SubscriptionService.identifyCustomer(userId);
     }
   });
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(const AuthSessionScope(child: MyApp()));
 }
 
 class MyApp extends ConsumerWidget {

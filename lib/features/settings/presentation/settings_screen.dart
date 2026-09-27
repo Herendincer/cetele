@@ -48,11 +48,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _signOut() async {
     setState(() => _isProcessingAuth = true);
     try {
-      await SupabaseService.client.auth.signOut();
-      await SupabaseService.ensureSession();
+      await SupabaseService.signOut();
     } catch (e) {
       if (mounted) {
-        AppSnackBar.showError(context, 'Çıkış yapılamadı: $e');
+        AppSnackBar.showError(
+          context,
+          'Çıkış işlemi tamamlanamadı. Lütfen tekrar deneyin.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isProcessingAuth = false);
@@ -131,7 +133,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   )
                 : ListTile(
                     leading: const Icon(Icons.account_circle_outlined),
-                    title: Text(email ?? 'Google Hesabı'),
+                    title: Text(
+                      email ?? 'Hesabım',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: const Text('Google ile bağlı'),
                     trailing: _isProcessingAuth
                         ? const SizedBox(
