@@ -9,6 +9,17 @@ class InvoicesRepository {
   InvoicesRepository(this.client);
   final SupabaseClient client;
 
+  /// Kullanıcı ve takvim ayı RPC içinde belirlenir; istemci filtre göndermez.
+  Future<int> countMonthlySalesInvoices() async {
+    final result = await client
+        .rpc('count_monthly_sales_invoices')
+        .withRequestTimeout();
+    if (result is! int || result < 0) {
+      throw StateError('Aylık fatura kullanımı alınamadı.');
+    }
+    return result;
+  }
+
   Future<List<InvoiceModel>> fetch(String userId) async {
     final rows = await client
         .from('invoices')
